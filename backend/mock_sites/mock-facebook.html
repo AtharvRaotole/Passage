@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook - Demo Site</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f0f2f5;
+        }
+        .header {
+            background: #1877f2;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .demo-banner {
+            background: #ff6b6b;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-weight: bold;
+        }
+        .container {
+            max-width: 980px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        .login-box {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+            padding: 20px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        .login-box h2 {
+            color: #1877f2;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #606770;
+            font-size: 14px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dddfe2;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #1877f2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background: #166fe5;
+        }
+        .demo-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 6px;
+            border-left: 4px solid #1877f2;
+        }
+        .demo-info h3 {
+            color: #1877f2;
+            margin-bottom: 10px;
+        }
+        .demo-info p {
+            color: #606770;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-banner">
+        🎭 DEMO MODE - This is a safe mock site. No real accounts will be affected.
+    </div>
+    <div class="header">
+        <h1>facebook</h1>
+        <div style="color: #fff; font-size: 14px;">Mock Site</div>
+    </div>
+    <div class="container">
+        <div class="login-box">
+            <h2>Log in to Facebook</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Email or phone number</label>
+                    <input type="text" id="email" placeholder="Enter your email" />
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="password" placeholder="Enter your password" />
+                </div>
+                <button type="submit" class="btn">Log In</button>
+            </form>
+            <div class="demo-info">
+                <h3>📝 Demo Instructions</h3>
+                <p>This is a mock Facebook site for safe testing. You can:</p>
+                <ul style="margin-top: 10px; padding-left: 20px;">
+                    <li>Enter any credentials (they won't be saved)</li>
+                    <li>Click buttons and navigate</li>
+                    <li>Test account actions like "Memorialize account"</li>
+                </ul>
+                <p style="margin-top: 10px;"><strong>No real accounts will be affected!</strong></p>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('🎭 DEMO MODE: Login action logged but not executed. This is a safe mock site.');
+        });
+    </script>
+</body>
+</html>
+

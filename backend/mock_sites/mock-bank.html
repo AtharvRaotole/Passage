@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank of America - Demo Site</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+        .demo-banner {
+            background: #ff6b6b;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-weight: bold;
+        }
+        .header {
+            background: #e31837;
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 24px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        .login-box {
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.1);
+            padding: 30px;
+        }
+        .login-box h2 {
+            color: #e31837;
+            margin-bottom: 25px;
+            font-size: 24px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: #e31837;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background: #c0142e;
+        }
+        .demo-info {
+            margin-top: 25px;
+            padding: 20px;
+            background: #fff3cd;
+            border-radius: 4px;
+            border-left: 4px solid #ffc107;
+        }
+        .demo-info h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+        .demo-info p {
+            color: #856404;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .account-actions {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .account-actions h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .action-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: left;
+        }
+        .action-btn:hover {
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-banner">
+        🎭 DEMO MODE - This is a safe mock site. No real bank accounts will be affected.
+    </div>
+    <div class="header">
+        <h1>Bank of America</h1>
+        <div style="color: #fff; font-size: 14px;">Mock Banking Site</div>
+    </div>
+    <div class="container">
+        <div class="login-box">
+            <h2>Sign In to Online Banking</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Online ID</label>
+                    <input type="text" id="onlineId" placeholder="Enter your Online ID" />
+                </div>
+                <div class="form-group">
+                    <label>Passcode</label>
+                    <input type="password" id="passcode" placeholder="Enter your Passcode" />
+                </div>
+                <button type="submit" class="btn">Sign In</button>
+            </form>
+            <div class="demo-info">
+                <h3>📝 Demo Instructions</h3>
+                <p>This is a mock banking site for safe testing. You can:</p>
+                <ul style="margin-top: 10px; padding-left: 20px;">
+                    <li>Enter any credentials (they won't be saved)</li>
+                    <li>Test account transfer actions</li>
+                    <li>View mock account balances</li>
+                </ul>
+                <p style="margin-top: 10px;"><strong>No real bank accounts will be affected!</strong></p>
+            </div>
+            <div class="account-actions">
+                <h3>Account Actions (Demo)</h3>
+                <button class="action-btn" onclick="alert('🎭 DEMO: Transfer action logged but not executed')">
+                    Transfer Funds to Beneficiary
+                </button>
+                <button class="action-btn" onclick="alert('🎭 DEMO: Close account action logged but not executed')">
+                    Close Account
+                </button>
+                <button class="action-btn" onclick="alert('🎭 DEMO: View balance action logged')">
+                    View Account Balance
+                </button>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('🎭 DEMO MODE: Login action logged but not executed. This is a safe mock site.');
+        });
+    </script>
+</body>
+</html>
+

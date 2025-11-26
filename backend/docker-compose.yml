@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: charon-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-charon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-charon_password}
+      POSTGRES_DB: ${POSTGRES_DB:-charon_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-charon}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - charon-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: charon-backend
+    environment:
+      # API Configuration
+      API_TITLE: ${API_TITLE:-Project Charon API}
+      API_VERSION: ${API_VERSION:-1.0.0}
+      HOST: 0.0.0.0
+      PORT: 8000
+      DEBUG: ${DEBUG:-false}
+      
+      # CORS
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      
+      # OpenAI
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      
+      # Browser
+      BROWSER_HEADLESS: ${BROWSER_HEADLESS:-true}
+      BROWSER_TIMEOUT: ${BROWSER_TIMEOUT:-30000}
+      
+      # Blockchain
+      RPC_URL: ${RPC_URL}
+      CHARON_SWITCH_ADDRESS: ${CHARON_SWITCH_ADDRESS}
+      
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-charon}:${POSTGRES_PASSWORD:-charon_password}@postgres:5432/${POSTGRES_DB:-charon_db}
+      
+      # Lit Protocol (if using)
+      LIT_PROTOCOL_KEY: ${LIT_PROTOCOL_KEY:-}
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./screenshots:/app/screenshots
+      - ./.browseruse:/app/.browseruse
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - charon-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  charon-network:
+    driver: bridge
+
