@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TrustSafety } from "@/components/privacy/TrustSafety";
+import { LoginButton } from "@/components/LoginComponent";
 
 export default function PrivacyPage() {
-  const { address, isConnected } = useAccount();
+  const { authenticated, user } = usePrivy();
+  const { address } = useAccount();
+  const walletAddress = address || user?.wallet?.address;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#00ff00] p-8">
@@ -21,10 +24,10 @@ export default function PrivacyPage() {
               Cryptographic proofs, security audits, and transparency reports
             </p>
           </div>
-          <ConnectButton />
+          <LoginButton />
         </div>
 
-        <TrustSafety userAddress={address} />
+        <TrustSafety userAddress={walletAddress} />
       </div>
     </div>
   );

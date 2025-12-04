@@ -1,56 +1,66 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider } from 'wagmi'
-import { RainbowKitProvider, getDefaultConfig } from '@rainbow-me/rainbowkit'
+import { PrivyProvider } from '@privy-io/react-auth'
+import { WagmiProvider } from '@privy-io/wagmi'
+import { createConfig } from '@privy-io/wagmi'
+import { http } from 'viem'
 import { 
   mainnet, 
   sepolia, 
-  polygonMumbai, 
   polygon,
   arbitrum,
-  arbitrumSepolia,
   base,
-  baseSepolia
-} from 'wagmi/chains'
-import { useState, useMemo } from 'react'
+} from 'viem/chains'
+import { useState } from 'react'
 
-import '@rainbow-me/rainbowkit/styles.css'
+// Create wagmi config
+const wagmiConfig = createConfig({
+  chains: [mainnet, sepolia, polygon, arbitrum, base],
+  transports: {
+    [mainnet.id]: http(),
+    [sepolia.id]: http(),
+    [polygon.id]: http(),
+    [arbitrum.id]: http(),
+    [base.id]: http(),
+  },
+})
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient())
   
-  const config = useMemo(() => {
-    const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID
-    if (!projectId) {
-      console.warn('NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID is not set')
-    }
-    
-    return getDefaultConfig({
-      appName: 'Project Charon',
-      projectId: projectId || 'YOUR_PROJECT_ID',
-      chains: [
-        mainnet, 
-        sepolia, 
-        polygon, 
-        polygonMumbai,
-        arbitrum,
-        arbitrumSepolia,
-        base,
-        baseSepolia
-      ],
-      ssr: true,
-    })
-  }, [])
+  const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID
+
+  // If no Privy appId, just wrap with QueryClientProvider
+  if (!appId) {
+    console.warn('NEXT_PUBLIC_PRIVY_APP_ID is not set')
+    return (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    )
+  }
 
   return (
-    <WagmiProvider config={config}>
+    <PrivyProvider
+      appId={appId}
+      config={{
+        loginMethods: ['email', 'wallet', 'google'],
+        appearance: {
+          theme: 'light',
+          accentColor: '#1a1a1a',
+        },
+        embeddedWallets: {
+          createOnLogin: 'users-without-wallets',
+        },
+        supportedChains: [mainnet, sepolia, polygon, arbitrum, base],
+      }}
+    >
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>
+        <WagmiProvider config={wagmiConfig}>
           {children}
-        </RainbowKitProvider>
+        </WagmiProvider>
       </QueryClientProvider>
-    </WagmiProvider>
+    </PrivyProvider>
   )
 }
-

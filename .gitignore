@@ -41,3 +41,4 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 
+ENV_SETUP.md

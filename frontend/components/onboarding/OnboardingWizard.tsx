@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { usePrivy } from "@privy-io/react-auth";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { CHARON_SWITCH_ABI, CHARON_SWITCH_ADDRESS } from "@/lib/contracts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,7 +49,9 @@ const TOTAL_STEPS = 5;
 
 export function OnboardingWizard() {
   const router = useRouter();
-  const { address, isConnected } = useAccount();
+  const { authenticated, user } = usePrivy();
+  const { address } = useAccount();
+  const walletAddress = address || user?.wallet?.address;
   const [currentStep, setCurrentStep] = useState(1);
   const [showPersonaSelector, setShowPersonaSelector] = useState(true);
   const [completionPercentage, setCompletionPercentage] = useState(0);
@@ -73,8 +75,8 @@ export function OnboardingWizard() {
   useEffect(() => {
     let percentage = 0;
     
-    // Step 1: Wallet connected = 20%
-    if (isConnected && address) percentage += 20;
+    // Step 1: Authenticated = 20%
+    if (authenticated && walletAddress) percentage += 20;
     
     // Step 2: Guardians set = 20%
     if (data.guardians.length === 3) percentage += 20;
@@ -91,12 +93,12 @@ export function OnboardingWizard() {
     
     // Award badges
     const badges: string[] = [];
-    if (isConnected) badges.push("wallet-connected");
+    if (authenticated) badges.push("wallet-connected");
     if (data.guardians.length === 3) badges.push("guardians-set");
     if (data.accounts.length >= 3) badges.push("accounts-imported");
     if (data.instructions.length >= 3) badges.push("instructions-ready");
     setEarnedBadges(badges);
-  }, [isConnected, address, data]);
+  }, [authenticated, walletAddress, data]);
 
   const handleNext = () => {
     if (currentStep < TOTAL_STEPS) {
@@ -120,8 +122,8 @@ export function OnboardingWizard() {
   };
 
   const handleComplete = async () => {
-    if (!address || !isConnected) {
-      alert("Please connect your wallet");
+    if (!walletAddress || !authenticated) {
+      alert("Please log in first");
       return;
     }
 

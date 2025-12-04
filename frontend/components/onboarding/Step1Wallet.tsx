@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingData } from "./OnboardingWizard";
+import { LoginComponent } from "@/components/LoginComponent";
 
 interface Step1WalletProps {
   data: OnboardingData;
@@ -16,7 +17,9 @@ interface Step1WalletProps {
 }
 
 export function Step1Wallet({ data, setData, onNext }: Step1WalletProps) {
-  const { isConnected, address } = useAccount();
+  const { authenticated, user } = usePrivy();
+  const { address } = useAccount();
+  const walletAddress = address || user?.wallet?.address;
   const [intervalDays, setIntervalDays] = useState(data.heartbeatInterval);
 
   const handleIntervalChange = (days: number) => {
@@ -28,7 +31,7 @@ export function Step1Wallet({ data, setData, onNext }: Step1WalletProps) {
     });
   };
 
-  const canProceed = isConnected && address && intervalDays > 0;
+  const canProceed = authenticated && walletAddress && intervalDays > 0;
 
   return (
     <div className="space-y-6">
@@ -43,22 +46,26 @@ export function Step1Wallet({ data, setData, onNext }: Step1WalletProps) {
 
       <Card className="bg-[#0a0a0a] border-[#00ff00]/20">
         <CardHeader>
-          <CardTitle className="text-[#00ff00] font-mono">Wallet Connection</CardTitle>
+          <CardTitle className="text-[#00ff00] font-mono">Account Setup</CardTitle>
           <CardDescription className="text-gray-400">
-            Connect using MetaMask, WalletConnect, or any supported wallet
+            Log in to create your account. A secure wallet will be created automatically for you.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex justify-center py-4">
-            <ConnectButton />
-          </div>
-          {isConnected && address && (
+          {!authenticated ? (
+            <div className="py-4">
+              <LoginComponent />
+            </div>
+          ) : walletAddress ? (
             <div className="mt-4 p-3 bg-[#00ff00]/10 rounded border border-[#00ff00]/20">
               <p className="text-sm font-mono text-[#00ff00]">
-                ✓ Connected: {address.slice(0, 6)}...{address.slice(-4)}
+                ✓ Logged in: {user?.email?.address || 'Connected'}
+              </p>
+              <p className="text-xs font-mono text-gray-400 mt-1">
+                Wallet: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
               </p>
             </div>
-          )}
+          ) : null}
         </CardContent>
       </Card>
 

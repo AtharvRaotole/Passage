@@ -1,42 +1,49 @@
 "use client";
 
+import { usePrivy } from "@privy-io/react-auth";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { CHARON_SWITCH_ABI, CHARON_SWITCH_ADDRESS, UserStatus } from "@/lib/contracts";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { DigitalWillForm } from "@/components/DigitalWillForm";
-import { EmergencyVerificationButton } from "@/components/EmergencyVerificationButton";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
-import { DemoModeBanner } from "@/components/DemoModeBanner";
-import { DemoModeToggle } from "@/components/DemoModeToggle";
+import { 
+  Shield, 
+  Heart, 
+  Clock, 
+  Wallet, 
+  FileText, 
+  Image as ImageIcon, 
+  Search, 
+  Settings,
+  ChevronRight,
+  Activity,
+  CheckCircle2,
+  AlertCircle,
+  Loader2
+} from "lucide-react";
 
 export default function DashboardPage() {
-  const { address, isConnected } = useAccount();
+  const { authenticated, user, login, logout } = usePrivy();
+  const { address } = useAccount();
   
-  // Read user info from contract
+  const walletAddress = address || user?.wallet?.address;
+  
   const { data: userInfo, refetch } = useReadContract({
     address: CHARON_SWITCH_ADDRESS,
     abi: CHARON_SWITCH_ABI,
     functionName: "getUserInfo",
-    args: address ? [address] : undefined,
+    args: walletAddress ? [walletAddress as `0x${string}`] : undefined,
     query: {
-      enabled: !!address && isConnected,
+      enabled: !!walletAddress && authenticated,
     },
   });
 
-  // Write contract for pulse
   const { writeContract, data: hash, isPending } = useWriteContract();
   
   const { isLoading: isConfirming, isSuccess: isConfirmed } = 
-    useWaitForTransactionReceipt({
-      hash,
-    });
+    useWaitForTransactionReceipt({ hash });
 
   const handlePulse = () => {
-    if (!address) return;
-    
+    if (!walletAddress) return;
     writeContract({
       address: CHARON_SWITCH_ADDRESS,
       abi: CHARON_SWITCH_ABI,
@@ -44,261 +51,198 @@ export default function DashboardPage() {
     });
   };
 
-  // Update data after transaction
   if (isConfirmed) {
     refetch();
   }
 
-  const status = userInfo?.[0] !== undefined ? userInfo[0] : null;
+  const status = userInfo?.[0] !== undefined ? Number(userInfo[0]) : null;
   const lastSeen = userInfo?.[1] ? Number(userInfo[1]) * 1000 : null;
   const threshold = userInfo?.[2] ? Number(userInfo[2]) : null;
 
-  const getStatusText = (status: number | null) => {
+  const getStatusInfo = (status: number | null) => {
     switch (status) {
       case UserStatus.ALIVE:
-        return "ALIVE";
+        return { text: "Active", color: "text-emerald-600", bg: "bg-emerald-50", icon: CheckCircle2 };
       case UserStatus.PENDING_VERIFICATION:
-        return "PENDING_VERIFICATION";
+        return { text: "Pending", color: "text-amber-600", bg: "bg-amber-50", icon: AlertCircle };
       case UserStatus.DECEASED:
-        return "DECEASED";
+        return { text: "Triggered", color: "text-red-600", bg: "bg-red-50", icon: AlertCircle };
       default:
-        return "UNKNOWN";
+        return { text: "Not Registered", color: "text-neutral-500", bg: "bg-neutral-50", icon: Clock };
     }
   };
 
-  const getStatusColor = (status: number | null) => {
-    switch (status) {
-      case UserStatus.ALIVE:
-        return "text-green-400";
-      case UserStatus.PENDING_VERIFICATION:
-        return "text-yellow-400";
-      case UserStatus.DECEASED:
-        return "text-red-400";
-      default:
-        return "text-gray-400";
-    }
-  };
+  const statusInfo = getStatusInfo(status);
 
-  if (!isConnected) {
+  // Login screen
+  if (!authenticated) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] text-[#00ff00] flex items-center justify-center">
-        <Card className="bg-[#1a1a1a] border-[#00ff00]/20 max-w-md">
-          <CardHeader>
-            <CardTitle className="text-[#00ff00] font-mono">
-              CHARON SYSTEM ACCESS
-            </CardTitle>
-            <CardDescription className="text-gray-400">
-              Connect your wallet to access the dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ConnectButton />
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-8">
+            <Link href="/" className="text-2xl font-semibold tracking-tight">
+              Passage
+            </Link>
+            <h1 className="mt-8 text-2xl font-medium text-neutral-900">
+              Welcome back
+            </h1>
+            <p className="mt-2 text-neutral-500">
+              Sign in to access your digital estate dashboard
+            </p>
+          </div>
+          
+          <div className="bg-white rounded-2xl border border-neutral-200 p-8 shadow-sm">
+            <button
+              onClick={login}
+              className="w-full bg-neutral-900 text-white py-3 rounded-xl font-medium hover:bg-neutral-800 transition-colors"
+            >
+              Sign in
+            </button>
+            <p className="mt-4 text-center text-sm text-neutral-500">
+              Sign in with email, Google, or your wallet
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-[#00ff00] p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* Demo Mode Banner */}
-        <DemoModeBanner />
-        
+    <div className="min-h-screen bg-neutral-50">
         {/* Header */}
-        <div className="flex justify-between items-center border-b border-[#00ff00]/20 pb-4">
-          <div>
-            <h1 className="text-4xl font-mono font-bold text-[#00ff00]">
-              CHARON DASHBOARD
-            </h1>
-            <p className="text-gray-400 text-sm mt-2 font-mono">
-              DIGITAL ESTATE MANAGEMENT SYSTEM v2.1.4
-            </p>
+      <header className="bg-white border-b border-neutral-200">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link href="/" className="text-xl font-semibold tracking-tight">
+            Passage
+          </Link>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-neutral-500">
+              {user?.email?.address || (walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : '')}
+            </span>
+            <button 
+              onClick={logout}
+              className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors"
+            >
+              Sign out
+            </button>
           </div>
-          <ConnectButton />
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        {/* Status Overview */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-neutral-900 mb-6">Dashboard</h1>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Status Card */}
+            <div className="bg-white rounded-2xl border border-neutral-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-neutral-500">Status</span>
+                <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full ${statusInfo.bg}`}>
+                  <statusInfo.icon className={`w-3.5 h-3.5 ${statusInfo.color}`} />
+                  <span className={`text-xs font-medium ${statusInfo.color}`}>{statusInfo.text}</span>
+                </div>
+              </div>
+              <div className="text-3xl font-semibold text-neutral-900 mb-1">
+                {lastSeen ? formatDistanceToNow(new Date(lastSeen), { addSuffix: false }) : '—'}
+              </div>
+              <div className="text-sm text-neutral-500">since last check-in</div>
+            </div>
+
+            {/* Threshold Card */}
+            <div className="bg-white rounded-2xl border border-neutral-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-neutral-500">Threshold</span>
+                <Clock className="w-4 h-4 text-neutral-400" />
+              </div>
+              <div className="text-3xl font-semibold text-neutral-900 mb-1">
+                {threshold ? Math.floor(threshold / 86400) : '—'}
+              </div>
+              <div className="text-sm text-neutral-500">days without activity</div>
+            </div>
+
+            {/* Pulse Card */}
+            <div className="bg-white rounded-2xl border border-neutral-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-neutral-500">Check-in</span>
+                <Activity className="w-4 h-4 text-neutral-400" />
+              </div>
+              <button
+                onClick={handlePulse}
+                disabled={isPending || isConfirming}
+                className="w-full bg-neutral-900 text-white py-3 rounded-xl font-medium hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {(isPending || isConfirming) ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Heart className="w-4 h-4" />
+                    Send Pulse
+                  </>
+                )}
+              </button>
+              {isConfirmed && (
+                <p className="mt-2 text-center text-sm text-emerald-600">
+                  Check-in confirmed
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Status Card */}
-        <Card className="bg-[#1a1a1a] border-[#00ff00]/20">
-          <CardHeader>
-            <CardTitle className="text-[#00ff00] font-mono">
-              SYSTEM STATUS
-            </CardTitle>
-            <CardDescription className="text-gray-400 font-mono">
-              Current user state and heartbeat information
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-gray-400 text-sm font-mono mb-1">
-                  STATUS:
-                </p>
-                <p className={`text-2xl font-mono font-bold ${getStatusColor(status)}`}>
-                  {getStatusText(status)}
-                </p>
+        {/* Quick Actions */}
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-neutral-900 mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { icon: Wallet, title: "Crypto Vault", description: "Manage digital assets", href: "/dashboard/vault" },
+              { icon: FileText, title: "Digital Will", description: "Account credentials", href: "/dashboard/will" },
+              { icon: ImageIcon, title: "Memory Vault", description: "Photos & messages", href: "/dashboard/memories" },
+              { icon: Search, title: "Asset Recovery", description: "Find unclaimed assets", href: "/dashboard/recovery" },
+            ].map((action, index) => (
+              <Link
+                key={index}
+                href={action.href}
+                className="group bg-white rounded-2xl border border-neutral-200 p-6 hover:border-neutral-300 hover:shadow-sm transition-all"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center group-hover:bg-neutral-900 group-hover:text-white transition-colors">
+                    <action.icon className="w-5 h-5" />
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-neutral-300 group-hover:text-neutral-500 transition-colors" />
+                </div>
+                <h3 className="mt-4 font-medium text-neutral-900">{action.title}</h3>
+                <p className="text-sm text-neutral-500">{action.description}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Settings */}
+        <div className="bg-white rounded-2xl border border-neutral-200 p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center">
+                <Settings className="w-5 h-5 text-neutral-600" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm font-mono mb-1">
-                  LAST SEEN:
-                </p>
-                <p className="text-lg font-mono text-gray-300">
-                  {lastSeen
-                    ? formatDistanceToNow(new Date(lastSeen), { addSuffix: true })
-                    : "N/A"}
-                </p>
+                <h3 className="font-medium text-neutral-900">Settings & Security</h3>
+                <p className="text-sm text-neutral-500">Manage guardians, thresholds, and security</p>
               </div>
             </div>
-            {threshold && (
-              <div>
-                <p className="text-gray-400 text-sm font-mono mb-1">
-                  THRESHOLD:
-                </p>
-                <p className="text-lg font-mono text-gray-300">
-                  {Math.floor(threshold / 86400)} days
-                </p>
-              </div>
-            )}
-            <Button
-              onClick={handlePulse}
-              disabled={isPending || isConfirming}
-              className="w-full bg-[#00ff00] text-black hover:bg-[#00cc00] font-mono font-bold text-lg py-6 mt-4"
-              size="lg"
+            <Link 
+              href="/onboarding"
+              className="text-sm font-medium text-neutral-900 hover:underline"
             >
-              {isPending || isConfirming
-                ? "PROCESSING..."
-                : "SEND PULSE"}
-            </Button>
-            {isConfirmed && (
-              <p className="text-green-400 text-sm font-mono text-center">
-                ✓ Pulse sent successfully
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Digital Will Form */}
-        <Card className="bg-[#1a1a1a] border-[#00ff00]/20">
-          <CardHeader>
-            <CardTitle className="text-[#00ff00] font-mono">
-              DIGITAL WILL REGISTRY
-            </CardTitle>
-            <CardDescription className="text-gray-400 font-mono">
-              Encrypt and store your digital estate credentials
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DigitalWillForm />
-          </CardContent>
-        </Card>
-
-        {/* Emergency Verification */}
-        <Card className="bg-[#1a1a1a] border-[#00ff00]/20">
-          <CardHeader>
-            <CardTitle className="text-[#00ff00] font-mono">
-              EMERGENCY VERIFICATION
-            </CardTitle>
-            <CardDescription className="text-gray-400 font-mono">
-              Manually trigger Chainlink Functions oracle query
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <EmergencyVerificationButton />
-          </CardContent>
-        </Card>
-
-        {/* Crypto Vault Link */}
-        <Card className="bg-[#1a1a1a] border-[#00ff00]/20">
-          <CardHeader>
-            <CardTitle className="text-[#00ff00] font-mono">
-              CRYPTO VAULT
-            </CardTitle>
-            <CardDescription className="text-gray-400 font-mono">
-              Manage your crypto assets and beneficiaries across multiple chains
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/dashboard/vault">
-              <Button className="w-full bg-[#00ff00] text-black hover:bg-[#00cc00] font-mono font-bold text-lg py-6">
-                OPEN CRYPTO VAULT
-              </Button>
+              Configure
             </Link>
-            <p className="text-gray-400 text-xs font-mono mt-3 text-center">
-              Multi-chain asset management • Automatic inheritance • Real-time portfolio tracking
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Memory Vault Link */}
-        <Card className="bg-[#1a1a1a] border-[#00ff00]/20">
-          <CardHeader>
-            <CardTitle className="text-[#00ff00] font-mono">
-              MEMORY VAULT
-            </CardTitle>
-            <CardDescription className="text-gray-400 font-mono">
-              Preserve your memories. Share your legacy. Forever encrypted and stored on IPFS.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/dashboard/memories">
-              <Button className="w-full bg-[#00ff00] text-black hover:bg-[#00cc00] font-mono font-bold text-lg py-6">
-                OPEN MEMORY VAULT
-              </Button>
-            </Link>
-            <p className="text-gray-400 text-xs font-mono mt-3 text-center">
-              Upload photos, videos, letters • Create time capsules • Automatic memory book generation
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Recovery Dashboard Link */}
-        <Card className="bg-[#1a1a1a] border-[#00ff00]/20">
-          <CardHeader>
-            <CardTitle className="text-[#00ff00] font-mono">
-              PROACTIVE ASSET RECOVERY
-            </CardTitle>
-            <CardDescription className="text-gray-400 font-mono">
-              Search for unclaimed property, life insurance, and treasury bonds
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/dashboard/recovery">
-              <Button className="w-full bg-[#00ff00] text-black hover:bg-[#00cc00] font-mono font-bold text-lg py-6">
-                ACCESS RECOVERY DASHBOARD
-              </Button>
-            </Link>
-            <p className="text-gray-400 text-xs font-mono mt-3 text-center">
-              $140B in unclaimed assets waiting to be recovered
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Demo Mode Toggle */}
-        <DemoModeToggle />
-
-        {/* Trust & Safety Link */}
-        <Card className="bg-[#1a1a1a] border-[#00ff00]/20">
-          <CardHeader>
-            <CardTitle className="text-[#00ff00] font-mono">
-              TRUST & SAFETY
-            </CardTitle>
-            <CardDescription className="text-gray-400 font-mono">
-              Cryptographic proofs, security audits, and transparency reports
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/privacy">
-              <Button className="w-full bg-[#00ff00] text-black hover:bg-[#00cc00] font-mono font-bold text-lg py-6">
-                VIEW TRUST & SAFETY
-              </Button>
-            </Link>
-            <p className="text-gray-400 text-xs font-mono mt-3 text-center">
-              Security verification • Node distribution • Legal compliance reports
-            </p>
-          </CardContent>
-        </Card>
+          </div>
       </div>
+      </main>
     </div>
   );
 }
-

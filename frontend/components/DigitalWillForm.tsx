@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { encryptCredential } from "@/utils/litCharon";
+import { useStatusCenterContext } from "@/components/StatusCenterProvider";
 
 interface WillEntry {
   websiteUrl: string;
@@ -17,6 +18,7 @@ interface WillEntry {
 
 export function DigitalWillForm() {
   const { address } = useAccount();
+  const { addStatus, updateStatus, dismissStatus } = useStatusCenterContext();
   const [formData, setFormData] = useState<WillEntry>({
     websiteUrl: "",
     username: "",
@@ -28,6 +30,7 @@ export function DigitalWillForm() {
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
+  const [optimisticWills, setOptimisticWills] = useState<WillEntry[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +44,18 @@ export function DigitalWillForm() {
 
     setIsSubmitting(true);
     setSubmitStatus({ type: null, message: "" });
+
+    // OPTIMISTIC UPDATE: Add to list immediately
+    const optimisticEntry = { ...formData };
+    setOptimisticWills((prev) => [...prev, optimisticEntry]);
+
+    // Show status notification
+    const statusId = addStatus({
+      type: "sync",
+      title: "Saving Digital Will",
+      description: "Encrypting and syncing to secure vault...",
+      status: "syncing",
+    });
 
     try {
       // Encrypt the password using Lit Protocol
@@ -70,6 +85,15 @@ export function DigitalWillForm() {
       // In production, this would be:
       // await supabase.from('digital_wills').insert(willData);
 
+      // Simulate async save (in production, this would be the actual API call)
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Update status to completed
+      updateStatus(statusId, {
+        status: "completed",
+        description: "Saved to secure vault",
+      });
+
       setSubmitStatus({
         type: "success",
         message: "Digital will entry encrypted and saved successfully",
@@ -82,8 +106,23 @@ export function DigitalWillForm() {
         password: "",
         instruction: "",
       });
+
+      // Auto-dismiss status after 3 seconds
+      setTimeout(() => dismissStatus(statusId), 3000);
     } catch (error: any) {
       console.error("Error saving digital will:", error);
+      
+      // Remove optimistic entry on error
+      setOptimisticWills((prev) =>
+        prev.filter((w) => w.websiteUrl !== optimisticEntry.websiteUrl)
+      );
+
+      // Update status to failed
+      updateStatus(statusId, {
+        status: "failed",
+        description: error.message || "Failed to save",
+      });
+
       setSubmitStatus({
         type: "error",
         message: error.message || "Failed to save digital will",

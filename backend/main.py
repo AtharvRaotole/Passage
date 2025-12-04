@@ -3,9 +3,9 @@ Project Charon - FastAPI Entry Point
 Production-ready FastAPI application for digital estate management
 """
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
@@ -19,11 +19,14 @@ from services.blockchain_listener import blockchain_listener
 from services.websocket_manager import websocket_manager
 from services.screenshot_service import screenshot_service
 from services.ipfs_service import IPFSService
+from services.tasks import execute_ai_task, get_task_id_by_execution_id, set_task_id_mapping
+from core.celery_app import celery_app
 from fastapi import UploadFile, File
 import asyncio
 import uuid
 import logging
 import tempfile
+from celery.result import AsyncResult
 
 logger = logging.getLogger(__name__)
 
@@ -134,33 +137,102 @@ async def health_check():
     }
 
 
-@app.post("/execute", response_model=ExecuteResponse)
+@app.post("/execute", status_code=status.HTTP_202_ACCEPTED)
 async def execute_task(request: ExecuteRequest):
     """
-    Execute a task using the DigitalExecutor AI agent
+    Execute a task using the DigitalExecutor AI agent (Background Job)
 
     This endpoint accepts a task description and optional session data
     (cookies, tokens, etc.) to execute tasks in a browser context with
-    authenticated sessions.
+    authenticated sessions. The task is queued and executed in the background.
+    
+    Returns 202 Accepted immediately with execution_id for tracking.
     """
     execution_id = str(uuid.uuid4())
     
-    # Start execution in background
-    asyncio.create_task(
-        executor.run_task(
-            task_description=request.task_description,
-            session_data=request.session_data,
-            execution_id=execution_id,
-        )
-    )
-    
-    # Return immediately with execution ID
-    return ExecuteResponse(
-        success=True,
-        output=f"Execution started",
-        error=None,
+    # Queue the task in Celery
+    task = execute_ai_task.delay(
+        task_description=request.task_description,
+        session_data=request.session_data,
         execution_id=execution_id,
     )
+    
+    # Store mapping for status lookup
+    set_task_id_mapping(execution_id, task.id)
+    
+    logger.info(f"Task queued: {execution_id}, Celery task ID: {task.id}")
+    
+    # Return 202 Accepted with execution ID
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={
+            "success": True,
+            "message": "Task queued for execution",
+            "execution_id": execution_id,
+            "task_id": task.id,
+            "status_url": f"/api/tasks/{execution_id}/status",
+        },
+    )
+
+
+@app.get("/api/tasks/{execution_id}/status")
+async def get_task_status(execution_id: str):
+    """
+    Get the status of a background task
+    
+    Args:
+        execution_id: Execution ID returned from /execute endpoint
+        
+    Returns:
+        Task status information
+    """
+    try:
+        task_id = get_task_id_by_execution_id(execution_id)
+        
+        if not task_id:
+            raise HTTPException(
+                status_code=404, detail=f"Task not found for execution_id: {execution_id}"
+            )
+        
+        # Get task result from Celery
+        task_result = AsyncResult(task_id, app=celery_app)
+        
+        # Map Celery states to our status
+        celery_state = task_result.state
+        if celery_state == "PENDING":
+            status_str = "pending"
+        elif celery_state == "STARTED":
+            status_str = "processing"
+        elif celery_state == "SUCCESS":
+            status_str = "completed"
+        elif celery_state == "FAILURE":
+            status_str = "failed"
+        else:
+            status_str = "processing"
+        
+        response = {
+            "execution_id": execution_id,
+            "task_id": task_id,
+            "status": status_str,
+            "celery_state": celery_state,
+            "websocket_url": f"/ws/execution/{execution_id}",
+        }
+        
+        # Include result if completed
+        if celery_state == "SUCCESS":
+            response["result"] = task_result.result
+        elif celery_state == "FAILURE":
+            response["error"] = str(task_result.info) if task_result.info else "Task failed"
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting task status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get task status: {str(e)}"
+        )
 
 
 @app.websocket("/ws/execution/{execution_id}")

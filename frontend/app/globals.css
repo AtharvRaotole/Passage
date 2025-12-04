@@ -4,25 +4,25 @@
 
 @layer base {
   :root {
-    --background: 0 0% 4%;
-    --foreground: 120 100% 50%;
-    --card: 0 0% 10%;
-    --card-foreground: 120 100% 50%;
-    --popover: 0 0% 10%;
-    --popover-foreground: 120 100% 50%;
-    --primary: 120 100% 50%;
-    --primary-foreground: 0 0% 0%;
-    --secondary: 0 0% 20%;
-    --secondary-foreground: 120 100% 50%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 0 0% 20%;
-    --accent-foreground: 120 100% 50%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 120 100% 50% / 0.2;
-    --input: 120 100% 50% / 0.3;
-    --ring: 120 100% 50%;
+    --background: 255 255 255;
+    --foreground: 10 10 10;
+    --card: 255 255 255;
+    --card-foreground: 10 10 10;
+    --popover: 255 255 255;
+    --popover-foreground: 10 10 10;
+    --primary: 10 10 10;
+    --primary-foreground: 255 255 255;
+    --secondary: 245 245 245;
+    --secondary-foreground: 10 10 10;
+    --muted: 245 245 245;
+    --muted-foreground: 115 115 115;
+    --accent: 245 245 245;
+    --accent-foreground: 10 10 10;
+    --destructive: 220 38 38;
+    --destructive-foreground: 255 255 255;
+    --border: 229 229 229;
+    --input: 229 229 229;
+    --ring: 10 10 10;
     --radius: 0.5rem;
   }
 }
@@ -32,7 +32,53 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Courier New', monospace;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
+}
+
+/* Professional typography */
+.font-display {
+  font-family: var(--font-serif), ui-serif, Georgia, serif;
+  letter-spacing: -0.02em;
+}
+
+/* Smooth animations */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.animate-fade-in-delay-1 {
+  animation: fade-in 0.5s ease-out 0.1s forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-delay-2 {
+  animation: fade-in 0.5s ease-out 0.2s forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-delay-3 {
+  animation: fade-in 0.5s ease-out 0.3s forwards;
+  opacity: 0;
+}
+
+/* Subtle gradient backgrounds */
+.bg-gradient-subtle {
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+}
+
+/* Clean card hover effect */
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
 }

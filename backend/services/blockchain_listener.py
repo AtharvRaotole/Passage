@@ -6,7 +6,14 @@ Listens for StatusChanged events and triggers agent execution
 import asyncio
 import os
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
+try:
+    from web3.middleware import geth_poa_middleware
+except ImportError:
+    # For newer web3.py versions, try alternative import
+    try:
+        from web3.middleware import ExtraDataToPOAMiddleware as geth_poa_middleware
+    except ImportError:
+        geth_poa_middleware = None
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import logging
@@ -74,7 +81,8 @@ class BlockchainListener:
         self.w3 = Web3(Web3.HTTPProvider(rpc_url))
         
         # Add PoA middleware for Polygon/Mumbai
-        self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        if geth_poa_middleware:
+            self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         
         contract_address = os.getenv(
             "CHARON_SWITCH_ADDRESS", "0x0000000000000000000000000000000000000000"
