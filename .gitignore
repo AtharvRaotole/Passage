@@ -41,4 +41,14 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 
+# LaTeX and PDF files
+*.tex
+*.pdf
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+
 ENV_SETUP.md
+DEMO_FLOW.md
