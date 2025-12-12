@@ -1,10 +1,10 @@
-# Project Charon
+# Passage
 
 A decentralized digital estate manager with Dead Man's Switch functionality, powered by Web3 and AI agents.
 
 ## Architecture
 
-Project Charon consists of three main components:
+Passage consists of three main components:
 
 1. **`/contracts`** - Hardhat project for the "Dead Man's Switch" smart contract logic and Chainlink Functions integration
 2. **`/backend`** - Python FastAPI service running the `browser-use` AI agent for activity verification and will execution
@@ -38,7 +38,7 @@ Create a `.env` file in the `/backend` directory:
 
 ```bash
 # API Configuration
-API_TITLE=Project Charon API
+API_TITLE=Passage API
 API_VERSION=1.0.0
 DEBUG=false
 
@@ -58,14 +58,14 @@ BROWSER_TIMEOUT=30000
 
 # Blockchain Configuration (REQUIRED)
 RPC_URL=https://polygon-mumbai.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
-CHARON_SWITCH_ADDRESS=0x...  # Deployed CharonSwitch contract address
+PASSAGE_SWITCH_ADDRESS=0x...  # Deployed PassageSwitch contract address
 
 # Database Configuration
-POSTGRES_USER=charon
+POSTGRES_USER=passage
 POSTGRES_PASSWORD=your_secure_password_here
-POSTGRES_DB=charon_db
+POSTGRES_DB=passage_db
 POSTGRES_PORT=5432
-DATABASE_URL=postgresql://charon:password@postgres:5432/charon_db
+DATABASE_URL=postgresql://passage:password@postgres:5432/passage_db
 
 # Lit Protocol Configuration (Optional - for encryption/decryption)
 LIT_PROTOCOL_KEY=your_lit_protocol_key_here
@@ -83,7 +83,7 @@ Create a `.env.local` file in the `/frontend` directory:
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 
 # Contract Address
-NEXT_PUBLIC_CHARON_SWITCH_ADDRESS=0x...  # Deployed contract address
+NEXT_PUBLIC_PASSAGE_SWITCH_ADDRESS=0x...  # Deployed contract address
 
 # WalletConnect
 NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your_walletconnect_project_id
@@ -217,7 +217,7 @@ pytest
 
 ```bash
 cd backend
-docker build -t charon-backend .
+docker build -t passage-backend .
 ```
 
 ### Database Migrations
