@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
 import { CHARON_SWITCH_ABI, CHARON_SWITCH_ADDRESS } from "@/lib/contracts";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -32,12 +32,26 @@ export default function OnboardingPage() {
   const [threshold, setThreshold] = useState(30);
   const [showSuccess, setShowSuccess] = useState(false);
   
-  const { authenticated, user, login } = usePrivy();
+  const { authenticated, user, login, logout } = usePrivy();
   const { address } = useAccount();
   const walletAddress = address || user?.wallet?.address;
 
   const { writeContract, data: hash, isPending, error: writeError, reset } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed, error: txError } = useWaitForTransactionReceipt({ hash });
+
+  // Check if user is already registered
+  const { data: userInfo } = useReadContract({
+    address: CHARON_SWITCH_ADDRESS,
+    abi: CHARON_SWITCH_ABI,
+    functionName: "getUserInfo",
+    args: walletAddress ? [walletAddress as `0x${string}`] : undefined,
+    query: {
+      enabled: !!walletAddress && authenticated,
+    },
+  });
+
+  // Don't auto-redirect - allow user to view onboarding flow for demo
+  // Only show warning, don't block navigation
 
   // Auto redirect after successful transaction
   useEffect(() => {
@@ -55,7 +69,22 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (writeError) {
       console.error('Write error:', writeError);
-      alert(`Transaction failed: ${writeError.message}`);
+      let errorMessage = writeError.message;
+      
+      // Provide user-friendly error messages
+      if (errorMessage.includes('UserNotRegistered') || errorMessage.includes('already registered')) {
+        errorMessage = 'You are already registered. Please use a different wallet or contact support.';
+      } else if (errorMessage.includes('InvalidGuardian')) {
+        errorMessage = 'Invalid guardian address. Please check that all guardians are valid and unique.';
+      } else if (errorMessage.includes('DuplicateGuardian')) {
+        errorMessage = 'Duplicate guardian addresses detected. Each guardian must be unique.';
+      } else if (errorMessage.includes('execution reverted')) {
+        errorMessage = 'Transaction failed. Common causes:\n\n1. You are already registered with this wallet\n   → Try using a different wallet address\n\n2. Invalid guardian addresses\n   → Ensure all 3 guardians are unique and valid\n\n3. Insufficient balance for gas fees\n   → Add more funds to your wallet\n\n4. Network issues\n   → Check your network connection';
+      } else if (errorMessage.includes('insufficient funds') || errorMessage.includes('balance')) {
+        errorMessage = 'Insufficient balance for gas fees. Please add funds to your wallet and try again.';
+      }
+      
+      alert(`Transaction failed: ${errorMessage}`);
       reset();
     }
     if (txError) {
@@ -65,13 +94,41 @@ export default function OnboardingPage() {
   }, [writeError, txError, reset]);
 
   const handleRegister = () => {
+    // Check if already registered - for demo, show message but allow viewing
+    if (userInfo && userInfo[2] && Number(userInfo[2]) > 0) {
+      const proceed = confirm('You are already registered with this wallet.\n\nFor demo purposes, you can:\n1. Use a different wallet address to register\n2. Or go to dashboard to view your existing registration\n\nClick OK to go to dashboard, or Cancel to stay here.');
+      if (proceed) {
+        router.push('/dashboard');
+      }
+      return;
+    }
+
     const validGuardians = guardians.filter(g => g && g.startsWith('0x') && g.length === 42);
     
-    // Pad guardians to always have 3 (contract expects address[3])
-    const paddedGuardians = [...validGuardians];
-    while (paddedGuardians.length < 3) {
-      paddedGuardians.push('0x0000000000000000000000000000000000000000');
+    // Contract requires exactly 3 unique, non-zero guardians that are not the sender
+    if (validGuardians.length < 3) {
+      alert('Please provide exactly 3 guardian wallet addresses');
+      return;
     }
+
+    // Check for duplicates (case-insensitive)
+    const uniqueGuardians = [...new Set(validGuardians.map(g => g.toLowerCase()))];
+    if (uniqueGuardians.length !== 3) {
+      alert('Guardian addresses must be unique');
+      return;
+    }
+
+    // Check that sender is not a guardian
+    if (walletAddress) {
+      const senderLower = walletAddress.toLowerCase();
+      if (uniqueGuardians.includes(senderLower)) {
+        alert('You cannot be your own guardian');
+        return;
+      }
+    }
+
+    // Ensure we have exactly 3 guardians (contract requires address[3])
+    const finalGuardians = validGuardians.slice(0, 3).map(g => g as `0x${string}`) as [`0x${string}`, `0x${string}`, `0x${string}`];
 
     try {
       writeContract({
@@ -80,12 +137,14 @@ export default function OnboardingPage() {
         functionName: "register",
         args: [
           BigInt(threshold * 86400), 
-          paddedGuardians.slice(0, 3) as [`0x${string}`, `0x${string}`, `0x${string}`],
+          finalGuardians,
           BigInt(2) // Required confirmations
         ],
+        gas: BigInt(15000000), // Set gas limit below network cap (16.7M)
       });
     } catch (err) {
       console.error('Registration error:', err);
+      alert('Failed to initiate registration. Please check your wallet balance and try again.');
     }
   };
 
@@ -335,6 +394,9 @@ export default function OnboardingPage() {
   }
 
   // Step 4: Activate
+  // Check if already registered and show message
+  const isAlreadyRegistered = userInfo && userInfo[2] && Number(userInfo[2]) > 0;
+
   return (
     <OnboardingLayout currentStep={currentStep}>
       <div className="max-w-md mx-auto">
@@ -349,6 +411,35 @@ export default function OnboardingPage() {
             Review and confirm your settings
           </p>
         </div>
+
+        {isAlreadyRegistered && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <p className="text-sm text-amber-800 mb-2">
+              ⚠️ <strong>Demo Note:</strong> You are already registered with this wallet address.
+            </p>
+            <p className="text-xs text-amber-700 mb-3">
+              For a fresh registration demo, use a different wallet address. You can still view the onboarding flow below.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="flex-1 bg-amber-600 text-white py-2 rounded-lg font-medium hover:bg-amber-700 transition-colors text-sm"
+              >
+                Go to Dashboard
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm('Switch to a different wallet to register a new account?')) {
+                    logout();
+                  }
+                }}
+                className="flex-1 bg-neutral-200 text-neutral-700 py-2 rounded-lg font-medium hover:bg-neutral-300 transition-colors text-sm"
+              >
+                Switch Wallet
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="bg-neutral-50 rounded-xl p-6 mb-8 space-y-4">
           <div className="flex justify-between">
@@ -379,7 +470,7 @@ export default function OnboardingPage() {
           </button>
           <button
             onClick={handleRegister}
-            disabled={isPending || isConfirming}
+            disabled={isPending || isConfirming || isAlreadyRegistered}
             className="flex-1 bg-neutral-900 text-white py-3 rounded-xl font-medium hover:bg-neutral-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isPending ? (
