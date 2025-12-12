@@ -189,30 +189,73 @@ export default function OnboardingPage() {
             <h2 className="text-2xl font-semibold text-neutral-900 mb-3">
               Add your guardians
             </h2>
-            <p className="text-neutral-500">
+            <p className="text-neutral-500 mb-2">
               Guardians are trusted people who can verify your status
+            </p>
+            <p className="text-xs text-neutral-400">
+              Enter their wallet addresses (e.g., 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb)
+            </p>
+          </div>
+
+          {/* Demo Test Addresses Button */}
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                const testAddresses = [
+                  "0x3a20111c22309e36316e54e138b217980fd7b8ce",
+                  "0x7803e858280d6791eca28b3ec7223b0d51943828",
+                  "0xd52b80eca1e5c13e1f0150c34b1d35c658e6de4d"
+                ];
+                setGuardians(testAddresses);
+              }}
+              className="w-full px-4 py-2 text-sm font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-lg border border-neutral-200 transition-colors"
+            >
+              🎲 Fill with Demo Test Addresses
+            </button>
+            <p className="text-xs text-neutral-400 mt-1 text-center">
+              Quick fill for demos and testing
             </p>
           </div>
 
           <div className="space-y-4 mb-8">
-            {guardians.map((guardian, index) => (
-              <div key={index}>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">
-                  Guardian {index + 1} {index === 0 && <span className="text-red-500">*</span>}
-                </label>
-                <input
-                  type="text"
-                  value={guardian}
-                  onChange={(e) => {
-                    const newGuardians = [...guardians];
-                    newGuardians[index] = e.target.value;
-                    setGuardians(newGuardians);
-                  }}
-                  placeholder="0x..."
-                  className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:border-neutral-400 focus:ring-0 outline-none transition-colors"
-                />
-              </div>
-            ))}
+            {guardians.map((guardian, index) => {
+              const isValidAddress = guardian && /^0x[a-fA-F0-9]{40}$/.test(guardian);
+              const hasValue = guardian.length > 0;
+              
+              return (
+                <div key={index}>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Guardian {index + 1} Wallet Address {index === 0 && <span className="text-red-500">*</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={guardian}
+                    onChange={(e) => {
+                      const newGuardians = [...guardians];
+                      newGuardians[index] = e.target.value;
+                      setGuardians(newGuardians);
+                    }}
+                    placeholder="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+                    className={`w-full px-4 py-3 rounded-xl border focus:ring-0 outline-none transition-colors font-mono text-sm ${
+                      hasValue && !isValidAddress
+                        ? "border-red-300 focus:border-red-400 bg-red-50"
+                        : isValidAddress
+                        ? "border-green-300 focus:border-green-400 bg-green-50"
+                        : "border-neutral-200 focus:border-neutral-400"
+                    }`}
+                  />
+                  {hasValue && !isValidAddress && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Invalid wallet address format. Must start with 0x and be 42 characters.
+                    </p>
+                  )}
+                  {isValidAddress && (
+                    <p className="text-xs text-green-600 mt-1">✓ Valid wallet address</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex gap-3">

@@ -735,7 +735,7 @@ For issues, questions, or contributions:
 
 - **GitHub Issues**: [Open an issue](https://github.com/yourusername/passage/issues)
 - **Documentation**: See [docs/](docs/) directory
-- **Email**: support@passage.io (if applicable)
+
 
 ---
 

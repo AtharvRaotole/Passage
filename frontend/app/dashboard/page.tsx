@@ -5,6 +5,7 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { CHARON_SWITCH_ABI, CHARON_SWITCH_ADDRESS, UserStatus } from "@/lib/contracts";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Shield, 
   Heart, 
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { authenticated, user, login, logout } = usePrivy();
   const { address } = useAccount();
   
@@ -204,20 +206,20 @@ export default function DashboardPage() {
               { icon: ImageIcon, title: "Memory Vault", description: "Photos & messages", href: "/dashboard/memories" },
               { icon: Search, title: "Asset Recovery", description: "Find unclaimed assets", href: "/dashboard/recovery" },
             ].map((action, index) => (
-              <Link
+              <div
                 key={index}
-                href={action.href}
-                className="group bg-white rounded-2xl border border-neutral-200 p-6 hover:border-neutral-300 hover:shadow-sm transition-all"
+                onClick={() => router.push(action.href)}
+                className="group bg-white rounded-2xl border border-neutral-200 p-6 hover:border-neutral-300 hover:shadow-sm transition-all cursor-pointer relative z-10"
               >
                 <div className="flex items-start justify-between">
                   <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center group-hover:bg-neutral-900 group-hover:text-white transition-colors">
-                    <action.icon className="w-5 h-5" />
+                    <action.icon className="w-5 h-5 text-neutral-600 group-hover:text-white transition-colors" />
                   </div>
                   <ChevronRight className="w-5 h-5 text-neutral-300 group-hover:text-neutral-500 transition-colors" />
                 </div>
-                <h3 className="mt-4 font-medium text-neutral-900">{action.title}</h3>
-                <p className="text-sm text-neutral-500">{action.description}</p>
-              </Link>
+                <h3 className="mt-4 font-medium text-neutral-900 group-hover:text-neutral-700 transition-colors">{action.title}</h3>
+                <p className="text-sm text-neutral-500 mt-1">{action.description}</p>
+              </div>
             ))}
           </div>
         </div>
