@@ -1,13 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSignMessage } from "wagmi";
 import { CHARON_SWITCH_ABI, CHARON_SWITCH_ADDRESS } from "@/lib/contracts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { saveUserOnboarding } from "@/utils/userApi";
+import {
+  batchCreateWills,
+  encryptAndPrepareWill,
+  signWillRequest,
+} from "@/utils/willStorage";
 import { Step1Wallet } from "./Step1Wallet";
 import { Step2Guardians } from "./Step2Guardians";
 import { Step3Accounts } from "./Step3Accounts";
@@ -17,6 +23,7 @@ import { PersonaSelector } from "./PersonaSelector";
 import { CompletionBadge } from "./CompletionBadge";
 
 export interface OnboardingData {
+  persona?: string;
   // Step 1
   heartbeatInterval: number; // days
   heartbeatIntervalSeconds: number;
@@ -49,13 +56,17 @@ const TOTAL_STEPS = 5;
 
 export function OnboardingWizard() {
   const router = useRouter();
-  const { authenticated, user } = usePrivy();
+  const { authenticated, user, getAccessToken } = usePrivy();
   const { address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const walletAddress = address || user?.wallet?.address;
   const [currentStep, setCurrentStep] = useState(1);
   const [showPersonaSelector, setShowPersonaSelector] = useState(true);
   const [completionPercentage, setCompletionPercentage] = useState(0);
   const [earnedBadges, setEarnedBadges] = useState<string[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
+  const savedRef = useRef(false);
   
   const [data, setData] = useState<OnboardingData>({
     heartbeatInterval: 30,
@@ -112,9 +123,14 @@ export function OnboardingWizard() {
     }
   };
 
-  const handlePersonaSelect = (persona: any) => {
+  const handlePersonaSelect = (persona: {
+    id: string;
+    accounts: OnboardingData["accounts"];
+    instructions: OnboardingData["instructions"];
+  }) => {
     setData({
       ...data,
+      persona: persona.id,
       accounts: persona.accounts,
       instructions: persona.instructions,
     });
@@ -151,17 +167,90 @@ export function OnboardingWizard() {
     });
   };
 
-  // Redirect to dashboard after successful registration
+  // Persist onboarding after on-chain registration succeeds
   useEffect(() => {
-    if (isConfirmed) {
-      // Save accounts and instructions to database (mock for now)
-      console.log("Saving onboarding data:", data);
-      
-      setTimeout(() => {
-        router.push("/dashboard?onboarded=true");
-      }, 2000);
+    if (!isConfirmed || !walletAddress || savedRef.current) return;
+
+    savedRef.current = true;
+    let cancelled = false;
+
+    async function persistOnboarding() {
+      setIsSavingOnboarding(true);
+      setSaveError(null);
+
+      try {
+        const token = await getAccessToken();
+        if (!token) {
+          throw new Error("Missing access token — please sign in again");
+        }
+
+        await saveUserOnboarding(token, {
+          walletAddress,
+          persona: data.persona,
+          heartbeatIntervalDays: data.heartbeatInterval,
+          requiredConfirmations: data.requiredConfirmations,
+          guardianTemplate: data.guardianTemplate,
+          guardians: data.guardians,
+          accounts: data.accounts.map(({ service, username, type, imported }) => ({
+            service,
+            username,
+            type,
+            imported,
+          })),
+          instructions: data.instructions,
+        });
+
+        const accountsWithPasswords = data.accounts.filter((a) => a.password);
+        if (accountsWithPasswords.length > 0) {
+          const auth = await signWillRequest(walletAddress, signMessageAsync);
+          const payloads = await Promise.all(
+            accountsWithPasswords.map((account) => {
+              const instruction =
+                data.instructions.find((i) => i.service === account.service)
+                  ?.instruction || "";
+              return encryptAndPrepareWill(
+                {
+                  websiteUrl: account.service,
+                  username: account.username,
+                  password: account.password!,
+                  instruction,
+                },
+                walletAddress
+              );
+            })
+          );
+          await batchCreateWills(payloads, auth);
+        }
+
+        if (!cancelled) {
+          router.push("/dashboard?onboarded=true");
+        }
+      } catch (err) {
+        savedRef.current = false;
+        if (!cancelled) {
+          setSaveError(
+            err instanceof Error ? err.message : "Failed to save onboarding data"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSavingOnboarding(false);
+        }
+      }
     }
-  }, [isConfirmed, router, data]);
+
+    persistOnboarding();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isConfirmed,
+    walletAddress,
+    data,
+    getAccessToken,
+    signMessageAsync,
+    router,
+  ]);
 
   if (showPersonaSelector) {
     return <PersonaSelector onSelect={handlePersonaSelect} />;
@@ -194,6 +283,18 @@ export function OnboardingWizard() {
       </Card>
 
       {/* Badges */}
+      {saveError && (
+        <div className="p-4 bg-red-950/50 border border-red-500/30 rounded text-red-300 text-sm font-mono">
+          Failed to save profile: {saveError}
+        </div>
+      )}
+
+      {isSavingOnboarding && (
+        <div className="p-4 bg-[#00ff00]/10 border border-[#00ff00]/20 rounded text-[#00ff00] text-sm font-mono">
+          Saving your profile and encrypted credentials…
+        </div>
+      )}
+
       {earnedBadges.length > 0 && (
         <div className="flex gap-2 flex-wrap">
           {earnedBadges.map((badge) => (

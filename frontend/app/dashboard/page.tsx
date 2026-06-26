@@ -6,26 +6,28 @@ import { CHARON_SWITCH_ABI, CHARON_SWITCH_ADDRESS, UserStatus } from "@/lib/cont
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { 
-  Shield, 
-  Heart, 
-  Clock, 
-  Wallet, 
-  FileText, 
-  Image as ImageIcon, 
-  Search, 
+import { useUserProfile } from "@/hooks/useUserProfile";
+import {
+  Shield,
+  Heart,
+  Clock,
+  Wallet,
+  FileText,
+  Image as ImageIcon,
+  Search,
   Settings,
   ChevronRight,
   Activity,
   CheckCircle2,
   AlertCircle,
-  Loader2
+  Loader2,
 } from "lucide-react";
 
 export default function DashboardPage() {
   const router = useRouter();
   const { authenticated, user, login, logout } = usePrivy();
   const { address } = useAccount();
+  const { data: userProfile, isLoading: profileLoading } = useUserProfile();
   
   const walletAddress = address || user?.wallet?.address;
   
@@ -135,6 +137,43 @@ export default function DashboardPage() {
         {/* Status Overview */}
         <div className="mb-8">
           <h1 className="text-2xl font-semibold text-neutral-900 mb-6">Dashboard</h1>
+
+          {userProfile && (
+            <div className="mb-6 bg-white rounded-2xl border border-neutral-200 p-5">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                <span className="text-neutral-500">
+                  Profile:{" "}
+                  <span className="text-neutral-900 font-medium">
+                    {userProfile.email || userProfile.displayName || "Wallet user"}
+                  </span>
+                </span>
+                <span className="text-neutral-500">
+                  Onboarding:{" "}
+                  <span
+                    className={
+                      userProfile.onboardingCompleted
+                        ? "text-emerald-600 font-medium"
+                        : "text-amber-600 font-medium"
+                    }
+                  >
+                    {profileLoading
+                      ? "Loading…"
+                      : userProfile.onboardingCompleted
+                        ? "Complete"
+                        : "Incomplete"}
+                  </span>
+                </span>
+                {userProfile.persona && (
+                  <span className="text-neutral-500">
+                    Persona:{" "}
+                    <span className="text-neutral-900 font-medium capitalize">
+                      {userProfile.persona.replace(/-/g, " ")}
+                    </span>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Status Card */}

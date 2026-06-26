@@ -10,7 +10,13 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from core.config import settings
 from db.base import Base
-from db.models import DigitalWill  # noqa: F401
+from db.models import (  # noqa: F401
+    DigitalWill,
+    User,
+    UserAccount,
+    UserGuardian,
+    UserInstruction,
+)
 
 config = context.config
 if config.config_file_name is not None:

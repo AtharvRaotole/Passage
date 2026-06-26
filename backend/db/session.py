@@ -56,7 +56,13 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     """Create tables if they do not exist (dev convenience; use Alembic in prod)."""
     from db.base import Base
-    from db.models import DigitalWill  # noqa: F401
+    from db.models import (  # noqa: F401
+        DigitalWill,
+        User,
+        UserAccount,
+        UserGuardian,
+        UserInstruction,
+    )
 
     engine = get_engine()
     if engine is None:

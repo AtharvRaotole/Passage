@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     SECRET_KEY: Optional[str] = None
     API_KEY: Optional[str] = None
 
+    # Privy authentication
+    PRIVY_APP_ID: Optional[str] = None
+    PRIVY_APP_SECRET: Optional[str] = None
+    PRIVY_JWT_VERIFICATION_KEY: Optional[str] = None
+
     # Blockchain Configuration
     RPC_URL: Optional[str] = None
     CHARON_SWITCH_ADDRESS: Optional[str] = None
@@ -65,6 +70,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"
 
 
 # Global settings instance

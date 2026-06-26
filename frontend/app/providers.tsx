@@ -13,6 +13,7 @@ import {
   base,
 } from 'viem/chains'
 import { useMemo, useState } from 'react'
+import { UserProfileSync } from '@/components/UserProfileSync'
 
 /** Optional dedicated RPC per chain — public defaults are slow / rate-limited. Set in .env.local */
 function transportForChain(chainId: number): Transport {
@@ -105,7 +106,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   const queryAndWagmi = (
     <QueryClientProvider client={queryClient}>
-      <WagmiProvider config={wagmiConfig}>{children}</WagmiProvider>
+      <WagmiProvider config={wagmiConfig}>
+        <UserProfileSync />
+        {children}
+      </WagmiProvider>
     </QueryClientProvider>
   )
 

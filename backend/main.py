@@ -29,6 +29,14 @@ from services.will_cache import (
     invalidate_wills_cache,
 )
 from middleware.wallet_auth import verify_wallet_signature, reject_plaintext_password_fields
+from core.privy_auth import PrivyUserClaims, get_current_privy_user
+from services.user_service import user_service
+from app.schemas.user import (
+    UserSyncRequest,
+    UserProfileResponse,
+    OnboardingSaveRequest,
+    OnboardingResponse,
+)
 from app.schemas.will import (
     CreateWillRequest,
     BatchCreateWillsRequest,
@@ -402,6 +410,63 @@ async def get_from_ipfs(ipfs_hash: str):
     except Exception as e:
         logger.error(f"Error fetching from IPFS: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch from IPFS: {str(e)}")
+
+
+# User Profile & Onboarding Endpoints
+@app.post("/api/users/sync", response_model=UserProfileResponse)
+async def sync_user(
+    request: UserSyncRequest,
+    claims: PrivyUserClaims = Depends(get_current_privy_user),
+):
+    """Upsert user profile on login (Privy-authenticated)."""
+    profile = await user_service.upsert_user_from_privy(
+        privy_user_id=claims.privy_user_id,
+        wallet_address=request.wallet_address,
+        email=request.email,
+        display_name=request.display_name,
+    )
+    return UserProfileResponse.model_validate(profile)
+
+
+@app.get("/api/users/me", response_model=UserProfileResponse)
+async def get_current_user_profile(
+    claims: PrivyUserClaims = Depends(get_current_privy_user),
+):
+    """Return the authenticated user's profile."""
+    profile = await user_service.get_profile_by_privy_id(claims.privy_user_id)
+    return UserProfileResponse.model_validate(profile)
+
+
+@app.get("/api/users/me/onboarding", response_model=OnboardingResponse)
+async def get_current_user_onboarding(
+    claims: PrivyUserClaims = Depends(get_current_privy_user),
+):
+    """Return saved onboarding data for the authenticated user."""
+    data = await user_service.get_onboarding_by_privy_id(claims.privy_user_id)
+    return OnboardingResponse.model_validate(data)
+
+
+@app.post("/api/users/onboarding", response_model=OnboardingResponse)
+async def save_user_onboarding(
+    request: OnboardingSaveRequest,
+    claims: PrivyUserClaims = Depends(get_current_privy_user),
+):
+    """Persist onboarding guardians, accounts metadata, and instructions."""
+    payload = {
+        "persona": request.persona,
+        "heartbeat_interval_days": request.heartbeat_interval_days,
+        "required_confirmations": request.required_confirmations,
+        "guardian_template": request.guardian_template,
+        "guardians": request.guardians,
+        "accounts": [a.model_dump() for a in request.accounts],
+        "instructions": [i.model_dump() for i in request.instructions],
+    }
+    data = await user_service.save_onboarding(
+        privy_user_id=claims.privy_user_id,
+        wallet_address=request.wallet_address,
+        payload=payload,
+    )
+    return OnboardingResponse.model_validate(data)
 
 
 # Digital Will Endpoints
