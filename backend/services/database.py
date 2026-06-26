@@ -1,113 +1,193 @@
 """
-Mock database service for Digital Will storage
-In production, this would connect to Supabase/Postgres
+Digital Will storage — Postgres with in-memory fallback when DATABASE_URL is unset.
 """
 
-from typing import List, Optional, Dict, Any
 from datetime import datetime
-import json
+from typing import Any, Dict, List, Optional
+import logging
+import uuid
 
-# Mock in-memory database
-_digital_wills_db: List[Dict[str, Any]] = []
+from sqlalchemy import select
+
+from core.config import settings
+from db.models.digital_will import DigitalWill
+from db.session import get_session_factory
+
+logger = logging.getLogger(__name__)
+
+_memory_db: List[Dict[str, Any]] = []
+
+
+def _normalize_address(user_address: str) -> str:
+    return user_address.lower()
+
+
+def _will_data_to_model(user_address: str, will_data: Dict[str, Any]) -> DigitalWill:
+    return DigitalWill(
+        user_address=_normalize_address(user_address),
+        website_url=will_data["websiteUrl"],
+        username=will_data.get("username", ""),
+        encrypted_password=will_data["encryptedPassword"],
+        password_hash=will_data["passwordHash"],
+        encrypted_symmetric_key=will_data["encryptedSymmetricKey"],
+        access_control_conditions=will_data["accessControlConditions"],
+        instruction=will_data["instruction"],
+        totp_secret=will_data.get("totpSecret"),
+    )
 
 
 class DigitalWillService:
-    """Service for managing Digital Will entries"""
+    """Async service for managing Digital Will entries."""
 
     @staticmethod
-    def save_will(user_address: str, will_data: Dict[str, Any]) -> str:
-        """
-        Save a digital will entry
-        
-        Args:
-            user_address: User's wallet address
-            will_data: Dictionary containing:
-                - websiteUrl: str
-                - username: str
-                - encryptedPassword: str
-                - passwordHash: str
-                - instruction: str
-        
-        Returns:
-            Will entry ID
-        """
+    def _use_postgres() -> bool:
+        return bool(settings.DATABASE_URL and get_session_factory())
+
+    @staticmethod
+    async def save_will(user_address: str, will_data: Dict[str, Any]) -> str:
+        if DigitalWillService._use_postgres():
+            factory = get_session_factory()
+            assert factory is not None
+            async with factory() as session:
+                entry = _will_data_to_model(user_address, will_data)
+                session.add(entry)
+                await session.commit()
+                await session.refresh(entry)
+                logger.info("[DB] Saved digital will for %s: %s", user_address, entry.id)
+                return str(entry.id)
+
         will_entry = {
-            "id": f"will_{len(_digital_wills_db) + 1}",
-            "userAddress": user_address.lower(),
+            "id": f"will_{len(_memory_db) + 1}",
+            "userAddress": _normalize_address(user_address),
             "websiteUrl": will_data["websiteUrl"],
-            "username": will_data["username"],
+            "username": will_data.get("username", ""),
             "encryptedPassword": will_data["encryptedPassword"],
             "passwordHash": will_data["passwordHash"],
+            "encryptedSymmetricKey": will_data["encryptedSymmetricKey"],
+            "accessControlConditions": will_data["accessControlConditions"],
             "instruction": will_data["instruction"],
             "createdAt": will_data.get("createdAt", datetime.utcnow().isoformat()),
-            "totpSecret": will_data.get("totpSecret"),  # Optional TOTP secret for 2FA
+            "totpSecret": will_data.get("totpSecret"),
         }
-        
-        _digital_wills_db.append(will_entry)
-        print(f"[DB] Saved digital will for {user_address}: {will_entry['id']}")
+        _memory_db.append(will_entry)
+        logger.info("[DB] Saved digital will (memory) for %s: %s", user_address, will_entry["id"])
         return will_entry["id"]
 
     @staticmethod
-    def get_wills_by_user(user_address: str) -> List[Dict[str, Any]]:
-        """
-        Get all digital wills for a user
-        
-        Args:
-            user_address: User's wallet address
-        
-        Returns:
-            List of will entries
-        """
-        user_wills = [
-            will for will in _digital_wills_db
-            if will["userAddress"].lower() == user_address.lower()
-        ]
-        print(f"[DB] Found {len(user_wills)} will(s) for {user_address}")
+    async def get_wills_by_user(
+        user_address: str, include_secrets: bool = True
+    ) -> List[Dict[str, Any]]:
+        addr = _normalize_address(user_address)
+
+        if DigitalWillService._use_postgres():
+            factory = get_session_factory()
+            assert factory is not None
+            async with factory() as session:
+                result = await session.execute(
+                    select(DigitalWill)
+                    .where(DigitalWill.user_address == addr)
+                    .order_by(DigitalWill.created_at.desc())
+                )
+                rows = result.scalars().all()
+                logger.info("[DB] Found %d will(s) for %s", len(rows), user_address)
+                return [r.to_dict(include_secrets=include_secrets) for r in rows]
+
+        user_wills = [w for w in _memory_db if w["userAddress"] == addr]
+        logger.info("[DB] Found %d will(s) (memory) for %s", len(user_wills), user_address)
+        if not include_secrets:
+            return [
+                {
+                    "id": w["id"],
+                    "userAddress": w["userAddress"],
+                    "websiteUrl": w["websiteUrl"],
+                    "username": w.get("username", ""),
+                    "instruction": w["instruction"],
+                    "createdAt": w.get("createdAt"),
+                }
+                for w in user_wills
+            ]
         return user_wills
 
     @staticmethod
-    def get_will_by_id(will_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get a specific will entry by ID
-        
-        Args:
-            will_id: Will entry ID
-        
-        Returns:
-            Will entry or None
-        """
-        for will in _digital_wills_db:
+    async def get_will_by_id(
+        will_id: str, include_secrets: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        will_uuid: Optional[uuid.UUID] = None
+        if DigitalWillService._use_postgres():
+            try:
+                will_uuid = uuid.UUID(will_id)
+            except ValueError:
+                return None
+
+        if DigitalWillService._use_postgres() and will_uuid is not None:
+            factory = get_session_factory()
+            assert factory is not None
+            async with factory() as session:
+                result = await session.execute(
+                    select(DigitalWill).where(DigitalWill.id == will_uuid)
+                )
+                row = result.scalar_one_or_none()
+                if row is None:
+                    return None
+                return row.to_dict(include_secrets=include_secrets)
+
+        for will in _memory_db:
             if will["id"] == will_id:
+                if not include_secrets:
+                    return {
+                        "id": will["id"],
+                        "userAddress": will["userAddress"],
+                        "websiteUrl": will["websiteUrl"],
+                        "username": will.get("username", ""),
+                        "instruction": will["instruction"],
+                        "createdAt": will.get("createdAt"),
+                    }
                 return will
         return None
 
     @staticmethod
-    def delete_will(will_id: str) -> bool:
-        """
-        Delete a will entry
-        
-        Args:
-            will_id: Will entry ID
-        
-        Returns:
-            True if deleted, False if not found
-        """
-        global _digital_wills_db
-        initial_count = len(_digital_wills_db)
-        _digital_wills_db = [w for w in _digital_wills_db if w["id"] != will_id]
-        deleted = len(_digital_wills_db) < initial_count
+    async def delete_will(will_id: str, user_address: str) -> bool:
+        addr = _normalize_address(user_address)
+
+        if DigitalWillService._use_postgres():
+            try:
+                will_uuid = uuid.UUID(will_id)
+            except ValueError:
+                return False
+            factory = get_session_factory()
+            assert factory is not None
+            async with factory() as session:
+                result = await session.execute(
+                    select(DigitalWill).where(
+                        DigitalWill.id == will_uuid,
+                        DigitalWill.user_address == addr,
+                    )
+                )
+                row = result.scalar_one_or_none()
+                if row is None:
+                    return False
+                await session.delete(row)
+                await session.commit()
+                logger.info("[DB] Deleted will entry: %s", will_id)
+                return True
+
+        global _memory_db
+        initial = len(_memory_db)
+        _memory_db = [
+            w
+            for w in _memory_db
+            if not (w["id"] == will_id and w["userAddress"] == addr)
+        ]
+        deleted = len(_memory_db) < initial
         if deleted:
-            print(f"[DB] Deleted will entry: {will_id}")
+            logger.info("[DB] Deleted will entry (memory): %s", will_id)
         return deleted
 
     @staticmethod
-    def clear_all() -> None:
-        """Clear all will entries (for testing)"""
-        global _digital_wills_db
-        _digital_wills_db.clear()
-        print("[DB] Cleared all will entries")
+    async def clear_all() -> None:
+        global _memory_db
+        _memory_db.clear()
+        logger.info("[DB] Cleared all will entries (memory only)")
 
 
-# Global service instance
 digital_will_service = DigitalWillService()
-

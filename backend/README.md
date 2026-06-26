@@ -35,6 +35,11 @@ POSTGRES_USER=charon
 POSTGRES_PASSWORD=your_secure_password_here
 POSTGRES_DB=charon_db
 DATABASE_URL=postgresql://charon:password@postgres:5432/charon_db
+
+# Redis (will list cache + Celery broker)
+REDIS_URL=redis://redis:6379/0
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
 ```
 
 ### Optional Variables
@@ -59,8 +64,10 @@ OPENAI_MODEL=gpt-4o
 BROWSER_HEADLESS=true
 BROWSER_TIMEOUT=30000
 
-# Lit Protocol (Optional)
+# Lit Protocol (Optional — required for production will decryption)
 LIT_PROTOCOL_KEY=your_lit_protocol_key_here
+LIT_SERVICE_PRIVATE_KEY=0x...  # Service wallet for backend Lit authSig on DECEASED
+LIT_DEV_MODE=false               # Set true to use simulated decryption in dev
 
 # Security
 SECRET_KEY=your_secret_key_here  # Generate with: openssl rand -hex 32
@@ -82,7 +89,12 @@ python -m playwright install chromium
 
 3. **Create `.env` file** with environment variables
 
-4. **Run the server:**
+4. **Run database migrations** (requires Postgres):
+```bash
+alembic upgrade head
+```
+
+5. **Run the server:**
 ```bash
 uvicorn main:app --reload
 ```

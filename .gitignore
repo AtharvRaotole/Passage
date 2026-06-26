@@ -38,6 +38,10 @@ coverage/
 .pytest_cache/
 .coverage
 
+# Redis snapshots
+dump.rdb
+**/dump.rdb
+
 # TypeScript
 *.tsbuildinfo
 

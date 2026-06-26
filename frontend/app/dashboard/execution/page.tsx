@@ -10,6 +10,7 @@ import { ScreenshotCarousel } from "@/components/execution/ScreenshotCarousel";
 import { TaskProgress } from "@/components/execution/TaskProgress";
 import { ExecutionGraph } from "@/components/execution/ExecutionGraph";
 import { LiveLogs } from "@/components/execution/LiveLogs";
+import { apiFetch } from "@/utils/apiClient";
 
 interface ExecutionStep {
   step: string;
@@ -34,6 +35,9 @@ export default function ExecutionDashboardPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [executionStatus, setExecutionStatus] = useState<"idle" | "running" | "completed" | "failed">("idle");
+  const [taskDescription, setTaskDescription] = useState(
+    "Go to https://google.com, search for 'Passage digital estate', and take a screenshot of the results."
+  );
   const { toast } = useToast();
 
   const handleMessage = useCallback((message: any) => {
@@ -151,12 +155,11 @@ export default function ExecutionDashboardPage() {
   // Start execution (this would typically be triggered by a button or automatically)
   const startExecution = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${apiUrl}/execute`, {
+      const response = await apiFetch("/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          task_description: "Navigate to example.com and perform actions",
+          task_description: taskDescription,
           session_data: {},
         }),
       });
@@ -202,7 +205,7 @@ export default function ExecutionDashboardPage() {
                 onClick={startExecution}
                 className="bg-[#00ff00] text-black hover:bg-[#00cc00] font-mono"
               >
-                Start Execution
+                ▶ Start Execution
               </Button>
             )}
             {executionStatus === "running" && !isPaused && (
@@ -222,13 +225,36 @@ export default function ExecutionDashboardPage() {
                 ▶ Resume Execution
               </Button>
             )}
+            {(executionStatus === "completed" || executionStatus === "failed") && (
+              <Button
+                onClick={() => { setExecutionStatus("idle"); setSteps([]); setScreenshots([]); setLogs([]); setExecutionId(null); }}
+                className="bg-gray-700 text-white hover:bg-gray-600 font-mono"
+              >
+                ↺ Reset
+              </Button>
+            )}
             <div className={`px-4 py-2 rounded font-mono ${
               isConnected ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
             }`}>
+
               {isConnected ? "● CONNECTED" : "○ DISCONNECTED"}
             </div>
           </div>
         </div>
+
+        {/* Task Input */}
+        {executionStatus === "idle" && (
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+            <label className="block text-sm text-gray-400 font-mono mb-2">TASK DESCRIPTION</label>
+            <textarea
+              value={taskDescription}
+              onChange={(e) => setTaskDescription(e.target.value)}
+              rows={3}
+              className="w-full bg-gray-800 text-green-400 font-mono text-sm rounded px-4 py-3 border border-gray-600 focus:border-green-500 outline-none resize-none"
+              placeholder="Describe what the AI agent should do..."
+            />
+          </div>
+        )}
 
         {/* Execution Graph */}
         <ExecutionGraph steps={steps} executionStatus={executionStatus} />

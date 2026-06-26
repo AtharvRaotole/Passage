@@ -19,6 +19,9 @@ interface TimeCapsule {
   createdAt: string;
 }
 
+const selectClass =
+  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+
 export function TimeCapsule() {
   const { address } = useAccount();
   const [capsules, setCapsules] = useState<TimeCapsule[]>([]);
@@ -31,32 +34,30 @@ export function TimeCapsule() {
 
   const handleCreateCapsule = useCallback(async () => {
     if (!address || !newCapsule.message) {
-      alert("Please enter a message");
+      alert(!address ? "Connect your wallet first." : "Please enter a message.");
       return;
     }
 
     if (newCapsule.unlockType === "date" && !newCapsule.unlockDate) {
-      alert("Please select an unlock date");
+      alert("Please select an unlock date.");
       return;
     }
 
     if (newCapsule.unlockType === "person" && !newCapsule.unlockPerson) {
-      alert("Please enter a recipient address");
+      alert("Please enter a recipient address.");
       return;
     }
 
     try {
-      // Create a text file from the message
       const messageBlob = new Blob([newCapsule.message], { type: "text/plain" });
       const messageFile = new File([messageBlob], "time-capsule.txt", { type: "text/plain" });
 
-      // Encrypt the message
       await encryptMemory(messageFile, address);
 
       const capsule: TimeCapsule = {
         id: `capsule_${Date.now()}`,
         message: newCapsule.message,
-        unlockType: newCapsule.unlockType as any,
+        unlockType: newCapsule.unlockType as TimeCapsule["unlockType"],
         unlockDate: newCapsule.unlockDate,
         unlockPerson: newCapsule.unlockPerson,
         encrypted: true,
@@ -71,121 +72,124 @@ export function TimeCapsule() {
         unlockPerson: "",
       });
 
-      alert("Time Capsule Created! Your message is encrypted and will unlock based on your conditions.");
-    } catch (error: any) {
-      alert(`Error: ${error.message || "Failed to create time capsule"}`);
+      alert("Time capsule created. Your message was encrypted for the chosen conditions.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to create time capsule.";
+      alert(`Error: ${message}`);
     }
   }, [address, newCapsule]);
 
   return (
     <div className="space-y-6">
-      {/* Create Time Capsule */}
-      <Card className="bg-[#1a1a1a] border-[#00ff00]/20">
+      <Card className="border border-neutral-200 bg-white shadow-sm">
         <CardHeader>
-          <CardTitle className="text-[#00ff00] font-mono">Create Time Capsule</CardTitle>
-          <CardDescription className="text-gray-400 font-mono">
-            Send a message to the future. Unlock on a specific date, for a specific person, or on your passing.
+          <CardTitle className="text-lg font-semibold text-neutral-900">Create time capsule</CardTitle>
+          <CardDescription className="text-neutral-500">
+            Unlock on a date, for a specific person, or when your estate status updates on-chain.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-[#00ff00] font-mono">Unlock Condition</Label>
+            <Label className="text-neutral-700">Unlock condition</Label>
             <select
               value={newCapsule.unlockType}
-              onChange={(e) => setNewCapsule({ ...newCapsule, unlockType: e.target.value as any })}
-              className="w-full bg-[#0a0a0a] border border-[#00ff00]/30 text-[#00ff00] font-mono p-2 rounded"
+              onChange={(e) =>
+                setNewCapsule({ ...newCapsule, unlockType: e.target.value as TimeCapsule["unlockType"] })
+              }
+              className={selectClass}
             >
-              <option value="date">Unlock on Date</option>
-              <option value="person">Unlock for Specific Person</option>
-              <option value="death">Unlock on My Passing</option>
+              <option value="date">Unlock on date</option>
+              <option value="person">Unlock for a specific person</option>
+              <option value="death">Unlock on my passing</option>
             </select>
           </div>
 
           {newCapsule.unlockType === "date" && (
             <div className="space-y-2">
-              <Label className="text-[#00ff00] font-mono">Unlock Date</Label>
+              <Label className="text-neutral-700">Unlock date</Label>
               <Input
                 type="date"
                 value={newCapsule.unlockDate}
                 onChange={(e) => setNewCapsule({ ...newCapsule, unlockDate: e.target.value })}
-                className="bg-[#0a0a0a] border-[#00ff00]/30 text-[#00ff00] font-mono"
+                className="border-neutral-200 bg-white"
               />
             </div>
           )}
 
           {newCapsule.unlockType === "person" && (
             <div className="space-y-2">
-              <Label className="text-[#00ff00] font-mono">Recipient Wallet Address</Label>
+              <Label className="text-neutral-700">Recipient wallet address</Label>
               <Input
                 value={newCapsule.unlockPerson}
                 onChange={(e) => setNewCapsule({ ...newCapsule, unlockPerson: e.target.value })}
-                placeholder="0x..."
-                className="bg-[#0a0a0a] border-[#00ff00]/30 text-[#00ff00] font-mono"
+                placeholder="0x…"
+                className="border-neutral-200 bg-white font-mono text-sm placeholder:text-neutral-400"
               />
             </div>
           )}
 
           {newCapsule.unlockType === "death" && (
-            <div className="p-3 bg-[#00ff00]/10 rounded border border-[#00ff00]/20">
-              <p className="text-sm text-[#00ff00] font-mono">
-                This message will unlock when your status changes to DECEASED in the CharonSwitch contract.
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+              <p className="text-sm text-neutral-700">
+                This message is intended to unlock when your status matches your CharonSwitch rules (e.g.
+                deceased), per your contract setup.
               </p>
             </div>
           )}
 
           <div className="space-y-2">
-            <Label className="text-[#00ff00] font-mono">Your Message *</Label>
+            <Label className="text-neutral-700">Your message *</Label>
             <Textarea
               value={newCapsule.message}
               onChange={(e) => setNewCapsule({ ...newCapsule, message: e.target.value })}
-              placeholder="Write your message to the future..."
-              className="bg-[#0a0a0a] border-[#00ff00]/30 text-[#00ff00] font-mono min-h-[200px]"
+              placeholder="Write your message to the future…"
+              className="min-h-[200px] border-neutral-200 bg-white text-neutral-900 placeholder:text-neutral-400"
             />
           </div>
 
           <Button
             onClick={handleCreateCapsule}
             disabled={!newCapsule.message}
-            className="w-full bg-[#00ff00] text-black hover:bg-[#00cc00] font-mono"
+            className="w-full bg-neutral-900 text-white hover:bg-neutral-800"
           >
-            Create Time Capsule
+            Create time capsule
           </Button>
         </CardContent>
       </Card>
 
-      {/* Time Capsules List */}
       <div>
-        <h2 className="text-2xl font-mono font-bold text-[#00ff00] mb-4">
-          Your Time Capsules ({capsules.length})
+        <h2 className="mb-4 text-lg font-semibold text-neutral-900">
+          Your time capsules ({capsules.length})
         </h2>
         {capsules.length === 0 ? (
-          <Card className="bg-[#1a1a1a] border-[#00ff00]/20">
-            <CardContent className="pt-6 text-center py-12">
-              <p className="text-gray-400 font-mono">No time capsules yet. Create your first one above.</p>
+          <Card className="border border-neutral-200 bg-white shadow-sm">
+            <CardContent className="py-12 text-center">
+              <p className="text-neutral-500">No time capsules yet. Create one above.</p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-4">
             {capsules.map((capsule) => (
-              <Card key={capsule.id} className="bg-[#1a1a1a] border-[#00ff00]/20">
+              <Card key={capsule.id} className="border border-neutral-200 bg-white shadow-sm">
                 <CardContent className="pt-6">
-                  <div className="flex items-start justify-between mb-4">
+                  <div className="mb-4 flex items-start justify-between gap-4">
                     <div>
-                      <h3 className="font-mono font-bold text-[#00ff00] mb-2">
+                      <h3 className="mb-1 font-semibold text-neutral-900">
                         {capsule.unlockType === "date" && `Unlocks: ${capsule.unlockDate}`}
-                        {capsule.unlockType === "person" && `For: ${capsule.unlockPerson?.slice(0, 10)}...`}
-                        {capsule.unlockType === "death" && "Unlocks on Your Passing"}
+                        {capsule.unlockType === "person" &&
+                          `For: ${capsule.unlockPerson?.slice(0, 10)}…`}
+                        {capsule.unlockType === "death" && "Unlocks on passing"}
                       </h3>
-                      <p className="text-xs text-gray-500 font-mono">
-                        Created: {new Date(capsule.createdAt).toLocaleDateString()}
+                      <p className="text-xs text-neutral-400">
+                        Created {new Date(capsule.createdAt).toLocaleDateString()}
                       </p>
                     </div>
-                    <span className="text-xs font-mono text-green-400">✓ Encrypted</span>
+                    <span className="shrink-0 text-xs font-medium text-emerald-600">Encrypted</span>
                   </div>
-                  <div className="p-4 bg-[#0a0a0a] rounded border border-[#00ff00]/10">
-                    <p className="text-gray-300 font-mono whitespace-pre-wrap">
+                  <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-4">
+                    <p className="whitespace-pre-wrap text-sm text-neutral-700">
                       {capsule.message.length > 200
-                        ? `${capsule.message.slice(0, 200)}...`
+                        ? `${capsule.message.slice(0, 200)}…`
                         : capsule.message}
                     </p>
                   </div>
@@ -198,4 +202,3 @@ export function TimeCapsule() {
     </div>
   );
 }
-

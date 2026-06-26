@@ -25,3 +25,6 @@ celery_app.conf.update(
     worker_max_tasks_per_child=50,  # Restart worker after 50 tasks
 )
 
+# Register Celery tasks when worker loads (-A core.celery_app must import tasks)
+import services.tasks  # noqa: E402, F401
+

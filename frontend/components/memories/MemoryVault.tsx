@@ -89,7 +89,7 @@ export function MemoryVault() {
     }
 
     alert("Memory added to vault. Encrypt and upload to save permanently.");
-  }, [address, newMemory, toast]);
+  }, [address, newMemory]);
 
   const handleEncryptAndUpload = useCallback(async (memoryId: string) => {
     if (!address) return;
@@ -120,7 +120,7 @@ export function MemoryVault() {
     } finally {
       setUploading(false);
     }
-  }, [address, memories, toast]);
+  }, [address, memories]);
 
   return (
     <div className="space-y-6">

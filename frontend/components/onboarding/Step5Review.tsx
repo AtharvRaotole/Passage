@@ -2,10 +2,16 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingData } from "./OnboardingWizard";
-import { encryptCredential } from "@/utils/litCharon";
-import { useAccount } from "wagmi";
+import { useAccount, useSignMessage } from "wagmi";
+import {
+  batchCreateWills,
+  encryptAndPrepareWill,
+  signWillRequest,
+} from "@/utils/willStorage";
+import { WillEntryFormData } from "@/types/will";
+import { isWillLitEnabled } from "@/utils/litCharon";
 
 interface Step5ReviewProps {
   data: OnboardingData;
@@ -17,8 +23,10 @@ interface Step5ReviewProps {
 
 export function Step5Review({ data, onComplete, onBack, isPending, isSuccess }: Step5ReviewProps) {
   const { address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const [encrypting, setEncrypting] = useState(false);
   const [encryptionProgress, setEncryptionProgress] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleEncryptAndComplete = async () => {
     if (!address) {
@@ -28,30 +36,59 @@ export function Step5Review({ data, onComplete, onBack, isPending, isSuccess }: 
 
     setEncrypting(true);
     setEncryptionProgress(0);
+    setSaveError(null);
 
     try {
-      // Encrypt passwords for accounts that have them
-      const accountsWithPasswords = data.accounts.filter((a) => a.password);
-      
-      for (let i = 0; i < accountsWithPasswords.length; i++) {
-        const account = accountsWithPasswords[i];
+      const accountsToSave = data.accounts.filter(
+        (a) => a.type === "manual" && a.password
+      );
+      const totalSteps = Math.max(accountsToSave.length, 1);
+      const payloads = [];
+
+      for (let i = 0; i < accountsToSave.length; i++) {
+        const account = accountsToSave[i];
+        const instruction =
+          data.instructions.find((inst) => inst.service === account.service)
+            ?.instruction ||
+          `Manage ${account.service} account per estate instructions`;
+
+        const entry: WillEntryFormData = {
+          websiteUrl: account.service.includes("http")
+            ? account.service
+            : `https://${account.service.toLowerCase().replace(/\s+/g, "")}.com`,
+          username: account.username,
+          password: account.password || "",
+          instruction,
+        };
+
         try {
-          await encryptCredential(account.password || "", address);
-          setEncryptionProgress(((i + 1) / accountsWithPasswords.length) * 100);
+          const payload = await encryptAndPrepareWill(entry, address);
+          payloads.push(payload);
         } catch (error) {
-          console.error(`Failed to encrypt password for ${account.service}:`, error);
+          console.error(`Failed to encrypt ${account.service}:`, error);
+          setSaveError(`Encryption failed for ${account.service}`);
+          setEncrypting(false);
+          return;
         }
+
+        setEncryptionProgress(((i + 1) / totalSteps) * 70);
+      }
+
+      if (payloads.length > 0) {
+        const auth = await signWillRequest(address, signMessageAsync);
+        setEncryptionProgress(85);
+        await batchCreateWills(payloads, auth);
       }
 
       setEncryptionProgress(100);
       setEncrypting(false);
-      
-      // Complete registration
       onComplete();
     } catch (error) {
-      console.error("Encryption failed:", error);
+      console.error("Save failed:", error);
       setEncrypting(false);
-      alert("Encryption failed. Please try again.");
+      setSaveError(
+        error instanceof Error ? error.message : "Failed to save digital wills"
+      );
     }
   };
 
@@ -202,10 +239,17 @@ export function Step5Review({ data, onComplete, onBack, isPending, isSuccess }: 
 
       <div className="p-4 bg-[#00ff00]/10 rounded border border-[#00ff00]/20">
         <p className="text-sm font-mono text-[#00ff00]">
-          🔒 All your data will be encrypted using Lit Protocol. Only you (or your guardians if needed) 
-          can decrypt it. Your passwords and instructions are secure.
+          {isWillLitEnabled()
+            ? "🔒 Passwords are encrypted with Lit Protocol before being saved to your secure vault."
+            : "⚠ Dev mode: wills saved without Lit encryption (NEXT_PUBLIC_WILL_SKIP_LIT=true)."}
         </p>
       </div>
+
+      {saveError && (
+        <div className="p-4 bg-red-950/50 border border-red-500/30 rounded text-red-400 text-sm font-mono">
+          {saveError}
+        </div>
+      )}
 
       <div className="flex justify-between">
         <Button

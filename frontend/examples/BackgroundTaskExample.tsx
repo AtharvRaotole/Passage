@@ -6,10 +6,18 @@
  */
 
 import { useState } from "react";
-import { useStatusCenterContext } from "@/components/StatusCenterProvider";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+// Stub — StatusCenterProvider was removed
+function useStatusCenterContext() {
+  return {
+    addStatus: (_obj: any): any => null,
+    updateStatus: (_id: any, _obj: any): any => null,
+    dismissStatus: (_id: any): any => null,
+  };
+}
 
 export function BackgroundTaskExample() {
   const { addStatus, updateStatus, dismissStatus } = useStatusCenterContext();

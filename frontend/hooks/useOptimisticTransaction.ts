@@ -2,7 +2,15 @@
 
 import { useState, useCallback } from "react";
 import { useWaitForTransactionReceipt } from "wagmi";
-import { useStatusCenter } from "@/components/StatusCenter";
+
+// Stub — StatusCenter component was removed
+function useStatusCenter() {
+  return {
+    addStatus: (_obj: any): any => null,
+    updateStatus: (_id: any, _obj: any): any => null,
+    dismissStatus: (_id: any): any => null,
+  };
+}
 
 interface OptimisticTransaction {
   hash: `0x${string}`;

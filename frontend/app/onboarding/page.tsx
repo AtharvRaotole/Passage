@@ -2,7 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useReadContract,
+  useChainId,
+  useChains,
+  useSwitchChain,
+} from "wagmi";
 import { CHARON_SWITCH_ABI, CHARON_SWITCH_ADDRESS } from "@/lib/contracts";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -36,8 +44,25 @@ export default function OnboardingPage() {
   const { address } = useAccount();
   const walletAddress = address || user?.wallet?.address;
 
+  const chainId = useChainId();
+  const chains = useChains();
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
+
+  const expectedRegistrationChainId = process.env.NEXT_PUBLIC_REGISTRATION_CHAIN_ID
+    ? Number(process.env.NEXT_PUBLIC_REGISTRATION_CHAIN_ID)
+    : undefined;
+
+  const activeChain = chains.find((c) => c.id === chainId);
+  const explorerBase = activeChain?.blockExplorers?.default?.url;
+
   const { writeContract, data: hash, isPending, error: writeError, reset } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed, error: txError } = useWaitForTransactionReceipt({ hash });
+  // Long timeout + explicit chain — avoids viem default (~60s) timing out on slow testnets / mismatched RPC polling
+  const { isLoading: isConfirming, isSuccess: isConfirmed, error: txError } = useWaitForTransactionReceipt({
+    hash,
+    chainId,
+    timeout: 300_000,
+    pollingInterval: 4_000,
+  });
 
   // Check if user is already registered
   const { data: userInfo } = useReadContract({
@@ -89,9 +114,25 @@ export default function OnboardingPage() {
     }
     if (txError) {
       console.error('Transaction error:', txError);
-      alert(`Transaction failed: ${txError.message}`);
+      const msg = txError.message || '';
+      const explorerHint =
+        hash && explorerBase
+          ? `\n\nView on explorer:\n${explorerBase}/tx/${hash}`
+          : hash
+            ? `\n\nTx hash (paste into the correct network explorer):\n${hash}`
+            : '';
+      if (msg.includes('Timed out') || msg.includes('timeout')) {
+        alert(
+          `Confirmation timed out — your tx may still be pending or mined on another network.\n\n` +
+            `Current wallet network chain ID: ${chainId}${expectedRegistrationChainId ? ` (expected: ${expectedRegistrationChainId})` : ''}.\n` +
+            `If MetaMask didn’t open: email login uses Privy’s embedded wallet (signing is in-app).\n` +
+            explorerHint
+        );
+      } else {
+        alert(`Transaction failed: ${msg}${explorerHint}`);
+      }
     }
-  }, [writeError, txError, reset]);
+  }, [writeError, txError, reset, hash, explorerBase, chainId, expectedRegistrationChainId]);
 
   const handleRegister = () => {
     // Check if already registered - for demo, show message but allow viewing
@@ -136,11 +177,10 @@ export default function OnboardingPage() {
         abi: CHARON_SWITCH_ABI,
         functionName: "register",
         args: [
-          BigInt(threshold * 86400), 
+          BigInt(threshold * 86400),
           finalGuardians,
-          BigInt(2) // Required confirmations
+          BigInt(2), // Required confirmations
         ],
-        gas: BigInt(15000000), // Set gas limit below network cap (16.7M)
       });
     } catch (err) {
       console.error('Registration error:', err);
@@ -203,7 +243,13 @@ export default function OnboardingPage() {
           <p className="text-neutral-500 mb-8">
             Sign in to get started with your digital estate plan
           </p>
-          
+          <p className="text-xs text-neutral-400 mb-6 text-left max-w-md mx-auto leading-relaxed">
+            <strong className="text-neutral-600">Email login:</strong> Privy creates an{" "}
+            <strong>embedded wallet</strong> — MetaMask often won’t pop up; approval happens inside Privy.
+            To use MetaMask or another browser wallet, open Sign in → choose <strong>Wallet</strong> (or
+            connect an external wallet from Privy).
+          </p>
+
           {authenticated && walletAddress ? (
             <div className="space-y-4">
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
@@ -395,7 +441,7 @@ export default function OnboardingPage() {
 
   // Step 4: Activate
   // Check if already registered and show message
-  const isAlreadyRegistered = userInfo && userInfo[2] && Number(userInfo[2]) > 0;
+  const isAlreadyRegistered = !!(userInfo && userInfo[2] && Number(userInfo[2]) > 0);
 
   return (
     <OnboardingLayout currentStep={currentStep}>
@@ -411,6 +457,24 @@ export default function OnboardingPage() {
             Review and confirm your settings
           </p>
         </div>
+
+        {expectedRegistrationChainId != null && chainId !== expectedRegistrationChainId && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-left">
+            <p className="text-sm text-red-900 font-medium">Wrong network for this deployment</p>
+            <p className="text-xs text-red-800 mt-1">
+              This app’s contract expects chain ID <strong>{expectedRegistrationChainId}</strong>. Your wallet
+              is on <strong>{chainId}</strong>. Switch before activating or the tx can hang or fail.
+            </p>
+            <button
+              type="button"
+              onClick={() => switchChain?.({ chainId: expectedRegistrationChainId })}
+              disabled={isSwitchingChain}
+              className="mt-3 w-full py-2 rounded-lg bg-red-900 text-white text-sm font-medium hover:bg-red-800 disabled:opacity-50"
+            >
+              {isSwitchingChain ? "Switching…" : `Switch to chain ${expectedRegistrationChainId}`}
+            </button>
+          </div>
+        )}
 
         {isAlreadyRegistered && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
@@ -440,6 +504,10 @@ export default function OnboardingPage() {
             </div>
           </div>
         )}
+
+        <div className="text-center text-xs text-neutral-500 mb-4 font-mono">
+          Network: {activeChain?.name ?? "Unknown"} (chainId {chainId})
+        </div>
 
         <div className="bg-neutral-50 rounded-xl p-6 mb-8 space-y-4">
           <div className="flex justify-between">
@@ -494,7 +562,21 @@ export default function OnboardingPage() {
         
         {(isPending || isConfirming) && (
           <p className="text-center text-sm text-neutral-500 mt-4">
-            Please wait while your transaction is being processed...
+            {isPending
+              ? "Confirm in your wallet (embedded wallet = in Privy UI; external wallet = extension popup)…"
+              : "Waiting for block confirmation (can take 1–5+ minutes on testnets)…"}
+          </p>
+        )}
+        {hash && explorerBase && (
+          <p className="text-center text-xs mt-2">
+            <a
+              href={`${explorerBase}/tx/${hash}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-neutral-600 underline"
+            >
+              View transaction on explorer
+            </a>
           </p>
         )}
       </div>

@@ -57,6 +57,54 @@ export const CHARON_SWITCH_ABI = [
   {
     inputs: [
       {
+        internalType: "bytes",
+        name: "encryptedSecretsReference",
+        type: "bytes",
+      },
+      {
+        internalType: "bytes",
+        name: "sourceCode",
+        type: "bytes",
+      },
+    ],
+    name: "initiateVerification",
+    outputs: [
+      {
+        internalType: "bytes32",
+        name: "",
+        type: "bytes32",
+      },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes",
+        name: "encryptedSecretsReference",
+        type: "bytes",
+      },
+      {
+        internalType: "bytes",
+        name: "sourceCode",
+        type: "bytes",
+      },
+    ],
+    name: "emergencyVerification",
+    outputs: [
+      {
+        internalType: "bytes32",
+        name: "",
+        type: "bytes32",
+      },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
         internalType: "address",
         name: "userAddress",
         type: "address",

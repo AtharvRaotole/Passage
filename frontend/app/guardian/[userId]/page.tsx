@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { usePrivy } from "@privy-io/react-auth";
 import { CHARON_SWITCH_ABI, CHARON_SWITCH_ADDRESS, UserStatus } from "@/lib/contracts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ export default function GuardianPage() {
   const params = useParams();
   const userId = params.userId as string;
   const { address, isConnected } = useAccount();
+  const { login, logout, authenticated } = usePrivy();
   
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [showExtensionModal, setShowExtensionModal] = useState(false);
@@ -124,14 +125,16 @@ export default function GuardianPage() {
   const requiredConfirmations = userInfo?.[4] ? Number(userInfo[4]) : 0;
   const confirmationCount = userInfo?.[5] ? Number(userInfo[5]) : 0;
   const isPendingVerification = status === UserStatus.PENDING_VERIFICATION;
-  const isGuardian = guardians.includes(address?.toLowerCase() || "");
+  const isGuardian = Array.from(guardians as string[]).some(
+    (g) => g.toLowerCase() === address?.toLowerCase()
+  );
   const hasAlreadyConfirmed = hasConfirmed === true;
   const isExpired = gracePeriodEnd ? isPast(gracePeriodEnd) : false;
   const isUrgent = gracePeriodEnd 
     ? gracePeriodEnd.getTime() - Date.now() < 24 * 60 * 60 * 1000 // Less than 24 hours
     : false;
 
-  if (!isConnected) {
+  if (!isConnected || !authenticated) {
     return (
       <div className="min-h-screen bg-[#f5f5f5] text-gray-900 flex items-center justify-center">
         <Card className="bg-white max-w-md border-gray-200">
@@ -142,7 +145,9 @@ export default function GuardianPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ConnectButton />
+            <Button onClick={login} className="w-full bg-gray-900 text-white hover:bg-gray-800">
+              Connect Wallet
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -178,7 +183,9 @@ export default function GuardianPage() {
             </p>
             <p className="text-sm text-gray-500 font-mono mt-1">{userId}</p>
           </div>
-          <ConnectButton />
+          <Button onClick={logout} variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
+            Disconnect
+          </Button>
         </div>
 
         {/* Verification Status Card */}

@@ -1,91 +1,73 @@
 """
-Lit Protocol decryption service
-Note: Lit Protocol Python SDK has limited support, so we use a workaround
-by calling the Node.js SDK via subprocess or using HTTP API
+Lit Protocol decryption service for DECEASED will execution.
 """
 
-import os
 import json
+import logging
 import subprocess
-from typing import Dict, Any, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class LitDecryptionService:
-    """Service for decrypting Lit Protocol encrypted data"""
+    """Service for decrypting Lit Protocol encrypted credentials."""
 
     def __init__(self):
         self.node_script_path = Path(__file__).parent.parent / "scripts" / "lit_decrypt.js"
         self._ensure_node_script()
 
     def _ensure_node_script(self):
-        """Ensure the Node.js decryption script exists"""
         script_dir = self.node_script_path.parent
         script_dir.mkdir(parents=True, exist_ok=True)
-        
         if not self.node_script_path.exists():
             self._create_node_script()
 
     def _create_node_script(self):
-        """Create the Node.js script for Lit decryption"""
-        script_content = """const { LitNodeClient } = require('lit-js-sdk');
-const readline = require('readline');
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
+        script_content = """const LitJsSdk = require('lit-js-sdk');
+const { LitNodeClient } = LitJsSdk;
 
 async function decrypt() {
   const input = JSON.parse(process.argv[2] || '{}');
-  const { ciphertext, dataToEncryptHash, userAddress, chain } = input;
-  
+  const {
+    ciphertext,
+    dataToEncryptHash,
+    userAddress,
+    chain,
+    encryptedSymmetricKey,
+    accessControlConditions,
+  } = input;
+
   try {
-    const client = new LitNodeClient({
-      litNetwork: chain || 'mumbai',
-      debug: false,
-    });
+    const litNetwork = chain === 'sepolia' ? 'cayenne' : 'mumbai';
+    const client = new LitNodeClient({ litNetwork, debug: false });
     await client.connect();
-    
-    const accessControlConditions = [
-      {
-        contractAddress: process.env.CHARON_SWITCH_ADDRESS || '0x0000000000000000000000000000000000000000',
-        functionName: 'getUserInfo',
-        functionParams: [userAddress],
-        functionAbi: {
-          inputs: [{ internalType: 'address', name: 'userAddress', type: 'address' }],
-          name: 'getUserInfo',
-          outputs: [
-            { internalType: 'enum CharonSwitch.UserStatus', name: 'status', type: 'uint8' },
-            { internalType: 'uint256', name: 'lastSeen', type: 'uint256' },
-            { internalType: 'uint256', name: 'threshold', type: 'uint256' },
-            { internalType: 'address[3]', name: 'guardians', type: 'address[3]' },
-            { internalType: 'uint256', name: 'requiredConfirmations', type: 'uint256' },
-            { internalType: 'uint256', name: 'confirmationCount', type: 'uint256' },
-          ],
-          stateMutability: 'view',
-          type: 'function',
-        },
-        chain: chain || 'mumbai',
-        returnValueTest: {
-          key: 'status',
-          comparator: '=',
-          value: '2', // DECEASED
-        },
-      },
-    ];
-    
-    const authSig = await LitJsSdk.checkAndSignAuthMessage({ chain: chain || 'mumbai' });
-    const symmetricKey = await client.getEncryptionKey({
-      accessControlConditions,
-      toDecrypt: dataToEncryptHash,
-      chain: chain || 'mumbai',
-      authSig,
-    });
-    
+
+    const conditions = accessControlConditions || [];
+    const authSig = await LitJsSdk.checkAndSignAuthMessage({ chain: chain || 'sepolia' });
+
+    let symmetricKey;
+    if (encryptedSymmetricKey) {
+      symmetricKey = await client.getEncryptionKey({
+        accessControlConditions: conditions,
+        toDecrypt: encryptedSymmetricKey,
+        chain: chain || 'sepolia',
+        authSig,
+      });
+    } else {
+      symmetricKey = await client.getEncryptionKey({
+        accessControlConditions: conditions,
+        toDecrypt: dataToEncryptHash,
+        chain: chain || 'sepolia',
+        authSig,
+      });
+    }
+
     const encryptedBlob = await LitJsSdk.base64StringToBlob(ciphertext);
     const decryptedString = await LitJsSdk.decryptString(encryptedBlob, symmetricKey);
-    
     console.log(JSON.stringify({ success: true, decrypted: decryptedString }));
   } catch (error) {
     console.log(JSON.stringify({ success: false, error: error.message }));
@@ -95,7 +77,7 @@ async function decrypt() {
 
 decrypt();
 """
-        with open(self.node_script_path, 'w') as f:
+        with open(self.node_script_path, "w") as f:
             f.write(script_content)
 
     async def decrypt_credential(
@@ -103,54 +85,54 @@ decrypt();
         ciphertext: str,
         data_to_encrypt_hash: str,
         user_address: str,
-        chain: str = "mumbai"
+        chain: str = "sepolia",
+        encrypted_symmetric_key: Optional[str] = None,
+        access_control_conditions: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[str]:
-        """
-        Decrypt a credential using Lit Protocol
-        
-        Args:
-            ciphertext: Encrypted credential (base64)
-            data_to_encrypt_hash: Hash of the original credential
-            user_address: User's wallet address
-            chain: Blockchain network (default: mumbai)
-        
-        Returns:
-            Decrypted credential string or None if decryption fails
-        """
-        try:
-            # For now, we'll simulate decryption since full Lit integration
-            # requires browser environment and wallet signatures
-            # In production, you'd call the Node.js script or use Lit's HTTP API
-            
-            print(f"[Lit] Attempting to decrypt credential for {user_address}")
-            print(f"[Lit] Note: Full decryption requires browser environment with wallet")
-            print(f"[Lit] Simulating decryption for development...")
-            
-            # Simulate decryption (in production, this would call Lit SDK)
-            # For testing, we can store a mapping or use a simple workaround
+        if settings.LIT_DEV_MODE:
+            logger.warning("[Lit] LIT_DEV_MODE — returning simulated decryption")
             return self._simulate_decryption(ciphertext, data_to_encrypt_hash)
-            
-        except Exception as e:
-            print(f"[Lit] Decryption error: {e}")
+
+        payload = {
+            "ciphertext": ciphertext,
+            "dataToEncryptHash": data_to_encrypt_hash,
+            "userAddress": user_address,
+            "chain": chain,
+            "encryptedSymmetricKey": encrypted_symmetric_key,
+            "accessControlConditions": access_control_conditions or [],
+        }
+
+        try:
+            result = subprocess.run(
+                ["node", str(self.node_script_path), json.dumps(payload)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env={
+                    **dict(__import__("os").environ),
+                    "CHARON_SWITCH_ADDRESS": settings.CHARON_SWITCH_ADDRESS or "",
+                },
+            )
+            if result.returncode != 0:
+                logger.error("[Lit] Node decrypt failed: %s", result.stderr)
+                if settings.LIT_DEV_MODE:
+                    return self._simulate_decryption(ciphertext, data_to_encrypt_hash)
+                return None
+
+            output = json.loads(result.stdout.strip().split("\n")[-1])
+            if output.get("success"):
+                return output.get("decrypted")
+            logger.error("[Lit] Decrypt error: %s", output.get("error"))
+            return None
+        except Exception as exc:
+            logger.error("[Lit] Decryption error: %s", exc)
             return None
 
     def _simulate_decryption(
         self, ciphertext: str, data_to_encrypt_hash: str
     ) -> Optional[str]:
-        """
-        Simulate decryption for development/testing
-        In production, this would use actual Lit Protocol SDK
-        """
-        # For development, we can use a simple mapping
-        # In production, this must use Lit Protocol's actual decryption
-        print(f"[Lit] Simulated decryption (development mode)")
-        print(f"[Lit] In production, this would decrypt using Lit Protocol")
-        
-        # Return a placeholder - in real implementation, this would decrypt
-        # For now, we'll need to handle this differently or use a test mode
+        logger.info("[Lit] Simulated decryption (development mode)")
         return "DECRYPTED_PASSWORD_PLACEHOLDER"
 
 
-# Global service instance
 lit_decryption_service = LitDecryptionService()
-

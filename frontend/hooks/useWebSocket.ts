@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { buildExecutionWebSocketUrl } from "@/utils/apiClient";
 
 interface WebSocketMessage {
   type: string;
@@ -37,10 +38,7 @@ export function useWebSocket({
       return;
     }
 
-    // Get WebSocket URL from environment or use default
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsHost = process.env.NEXT_PUBLIC_WS_HOST || window.location.host;
-    const wsUrl = `${wsProtocol}//${wsHost}/ws/execution/${executionId}`;
+    const wsUrl = buildExecutionWebSocketUrl(executionId);
 
     try {
       const ws = new WebSocket(wsUrl);

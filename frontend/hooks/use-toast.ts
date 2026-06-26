@@ -2,7 +2,9 @@
 
 import * as React from "react"
 
-type ToastActionElement = React.ReactElement<typeof ToastAction>
+// ToastAction is a placeholder type since we don't have a full toast UI library
+type ToastAction = { altText: string }
+type ToastActionElement = React.ReactElement<ToastAction>
 
 export interface ToastProps {
   id: string
@@ -20,6 +22,8 @@ type ToasterToast = ToastProps & {
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 const actionTypes = {

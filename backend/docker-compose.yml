@@ -1,6 +1,21 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: charon-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - charon-network
+
   postgres:
     image: postgres:15-alpine
     container_name: charon-postgres
@@ -26,36 +41,25 @@ services:
       dockerfile: Dockerfile
     container_name: charon-backend
     environment:
-      # API Configuration
       API_TITLE: ${API_TITLE:-Project Charon API}
       API_VERSION: ${API_VERSION:-1.0.0}
       HOST: 0.0.0.0
       PORT: 8000
       DEBUG: ${DEBUG:-false}
-      
-      # CORS
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
-      
-      # OpenAI
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
-      
-      # Browser
       BROWSER_HEADLESS: ${BROWSER_HEADLESS:-true}
       BROWSER_TIMEOUT: ${BROWSER_TIMEOUT:-30000}
-      
-      # Blockchain
       RPC_URL: ${RPC_URL}
       CHARON_SWITCH_ADDRESS: ${CHARON_SWITCH_ADDRESS}
-      
-      # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-charon}:${POSTGRES_PASSWORD:-charon_password}@postgres:5432/${POSTGRES_DB:-charon_db}
-      
-      # Lit Protocol (if using)
-      LIT_PROTOCOL_KEY: ${LIT_PROTOCOL_KEY:-}
-      
-      # Security
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      REDIS_URL: redis://redis:6379/0
+      API_KEY: ${API_KEY}
       SECRET_KEY: ${SECRET_KEY}
+      LIT_PROTOCOL_KEY: ${LIT_PROTOCOL_KEY:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -64,6 +68,8 @@ services:
       - ./.browseruse:/app/.browseruse
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - charon-network
@@ -78,8 +84,9 @@ services:
 volumes:
   postgres_data:
     driver: local
+  redis_data:
+    driver: local
 
 networks:
   charon-network:
     driver: bridge
-

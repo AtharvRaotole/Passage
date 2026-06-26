@@ -90,6 +90,8 @@ class DigitalExecutor:
             viewport={"width": 1920, "height": 1080},
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         )
+        context.set_default_timeout(settings.BROWSER_TIMEOUT)
+        context.set_default_navigation_timeout(settings.BROWSER_TIMEOUT)
 
         # Handle cookies from session_data
         if "cookies" in session_data:
@@ -209,6 +211,8 @@ class DigitalExecutor:
                 context = await self.browser.new_context(
                     viewport={"width": 1920, "height": 1080}
                 )
+                context.set_default_timeout(settings.BROWSER_TIMEOUT)
+                context.set_default_navigation_timeout(settings.BROWSER_TIMEOUT)
             
             await self._emit_event(execution_id, "step", {
                 "step": "Creating browser context",
@@ -319,7 +323,8 @@ class DigitalExecutor:
                 })
                 
                 logger.info(f"Attempting task execution (attempt {attempt}/{max_retries})")
-                result = await agent.run()
+                timeout_seconds = settings.BROWSER_TIMEOUT / 1000
+                result = await asyncio.wait_for(agent.run(), timeout=timeout_seconds)
                 
                 # Capture success screenshot
                 pages = context.pages

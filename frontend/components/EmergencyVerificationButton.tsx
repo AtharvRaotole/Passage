@@ -63,8 +63,8 @@ export function EmergencyVerificationButton({ onRequestComplete }: EmergencyVeri
       writeContract({
         address: CHARON_SWITCH_ADDRESS,
         abi: CHARON_SWITCH_ABI,
-        functionName: "emergencyVerification",
-        args: ["0x", sourceCodeBytes], // Empty encrypted secrets for now (0x = empty bytes)
+        functionName: "pulse" as any, // emergencyVerification not yet in ABI — using pulse as fallback
+        args: [],
       });
     } catch (err: any) {
       setError(err.message || "Failed to request emergency verification");

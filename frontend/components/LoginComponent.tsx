@@ -54,6 +54,13 @@ export function LoginComponent() {
       <p className="mt-4 text-center text-xs text-neutral-400">
         Continue with email, Google, or wallet
       </p>
+      <p className="mt-3 text-center text-xs text-neutral-500 leading-relaxed">
+        <strong className="text-neutral-600">MetaMask:</strong> open Sign in and choose{" "}
+        <strong>Wallet</strong> (or &quot;Continue with a wallet&quot;) so Privy connects your browser
+        extension. Email-only login uses Privy&apos;s <strong>embedded wallet</strong> — no MetaMask
+        popup. Switch network in the Privy approval UI or your wallet to match your contract (e.g.{" "}
+        Sepolia).
+      </p>
     </div>
   )
 }

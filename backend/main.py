@@ -3,7 +3,7 @@ Project Charon - FastAPI Entry Point
 Production-ready FastAPI application for digital estate management
 """
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status, Depends, UploadFile, File, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,13 +13,30 @@ import uvicorn
 from pathlib import Path
 
 from core.config import settings
+from core.auth import verify_api_key
 from agent.executor import executor
 from agent.recovery_agent import recovery_agent
 from services.blockchain_listener import blockchain_listener
 from services.websocket_manager import websocket_manager
 from services.screenshot_service import screenshot_service
 from services.ipfs_service import IPFSService
-from services.tasks import execute_ai_task, get_task_id_by_execution_id, set_task_id_mapping
+from services.tasks import execute_ai_task
+from services.task_store import get_task_id_by_execution_id, set_task_id_mapping
+from services.database import digital_will_service
+from services.will_cache import (
+    get_cached_wills,
+    set_cached_wills,
+    invalidate_wills_cache,
+)
+from middleware.wallet_auth import verify_wallet_signature, reject_plaintext_password_fields
+from app.schemas.will import (
+    CreateWillRequest,
+    BatchCreateWillsRequest,
+    WillListResponse,
+    WillResponse,
+    will_dict_to_response,
+    create_request_to_will_data,
+)
 from core.celery_app import celery_app
 from fastapi import UploadFile, File
 import asyncio
@@ -28,7 +45,45 @@ import logging
 import tempfile
 from celery.result import AsyncResult
 
+from db.session import init_db
+
 logger = logging.getLogger(__name__)
+
+_will_create_counts: Dict[str, list] = {}
+WILL_CREATE_LIMIT = 30
+
+
+def _check_will_rate_limit(user_address: str) -> None:
+    import time
+
+    now = time.time()
+    key = user_address.lower()
+    window = [t for t in _will_create_counts.get(key, []) if now - t < 60]
+    if len(window) >= WILL_CREATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    window.append(now)
+    _will_create_counts[key] = window
+
+
+def _parse_will_auth(
+    x_will_address: Optional[str],
+    x_will_signature: Optional[str],
+    x_will_timestamp: Optional[str],
+) -> str:
+    if not x_will_address or not x_will_signature or not x_will_timestamp:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing wallet auth headers",
+        )
+    try:
+        ts = int(x_will_timestamp)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid timestamp",
+        ) from exc
+    verify_wallet_signature(x_will_address, x_will_signature, ts)
+    return x_will_address
 
 
 # Initialize FastAPI app
@@ -137,7 +192,7 @@ async def health_check():
     }
 
 
-@app.post("/execute", status_code=status.HTTP_202_ACCEPTED)
+@app.post("/execute", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_api_key)])
 async def execute_task(request: ExecuteRequest):
     """
     Execute a task using the DigitalExecutor AI agent (Background Job)
@@ -282,7 +337,7 @@ async def get_screenshot(execution_id: str, filename: str):
 # IPFS/Memory Vault Endpoints
 ipfs_service = IPFSService()
 
-@app.post("/api/ipfs/upload")
+@app.post("/api/ipfs/upload", dependencies=[Depends(verify_api_key)])
 async def upload_to_ipfs(
     file: UploadFile = File(...),
     metadata: Optional[str] = None
@@ -349,8 +404,106 @@ async def get_from_ipfs(ipfs_hash: str):
         raise HTTPException(status_code=500, detail=f"Failed to fetch from IPFS: {str(e)}")
 
 
+# Digital Will Endpoints
+@app.get("/api/wills", response_model=WillListResponse)
+async def list_wills(
+    user_address: str = Query(..., description="Wallet address"),
+    x_will_address: Optional[str] = Header(None),
+    x_will_signature: Optional[str] = Header(None),
+    x_will_timestamp: Optional[str] = Header(None),
+):
+    """List digital wills for a user (metadata only, no ciphertext)."""
+    auth_address = _parse_will_auth(
+        x_will_address, x_will_signature, x_will_timestamp
+    )
+    if auth_address.lower() != user_address.lower():
+        raise HTTPException(status_code=403, detail="Address mismatch")
+
+    cached = await get_cached_wills(user_address)
+    if cached is not None:
+        responses = [will_dict_to_response(w) for w in cached]
+        return WillListResponse(wills=responses, total=len(responses))
+
+    raw = await digital_will_service.get_wills_by_user(
+        user_address, include_secrets=False
+    )
+    await set_cached_wills(user_address, raw)
+    responses = [will_dict_to_response(w) for w in raw]
+    return WillListResponse(wills=responses, total=len(responses))
+
+
+@app.post("/api/wills", response_model=WillResponse, status_code=201)
+async def create_will(
+    request: CreateWillRequest,
+    x_will_address: Optional[str] = Header(None),
+    x_will_signature: Optional[str] = Header(None),
+    x_will_timestamp: Optional[str] = Header(None),
+):
+    """Create a digital will entry (encrypted payload only)."""
+    user_address = _parse_will_auth(
+        x_will_address, x_will_signature, x_will_timestamp
+    )
+    _check_will_rate_limit(user_address)
+    reject_plaintext_password_fields(request.model_dump())
+
+    will_data = create_request_to_will_data(request)
+    will_id = await digital_will_service.save_will(user_address, will_data)
+    await invalidate_wills_cache(user_address)
+
+    saved = await digital_will_service.get_will_by_id(will_id, include_secrets=False)
+    if not saved:
+        raise HTTPException(status_code=500, detail="Failed to retrieve saved will")
+    return will_dict_to_response(saved)
+
+
+@app.post("/api/wills/batch", response_model=WillListResponse, status_code=201)
+async def batch_create_wills(
+    request: BatchCreateWillsRequest,
+    x_will_address: Optional[str] = Header(None),
+    x_will_signature: Optional[str] = Header(None),
+    x_will_timestamp: Optional[str] = Header(None),
+):
+    """Bulk create will entries (onboarding)."""
+    user_address = _parse_will_auth(
+        x_will_address, x_will_signature, x_will_timestamp
+    )
+    _check_will_rate_limit(user_address)
+
+    created: list[WillResponse] = []
+    for item in request.wills:
+        reject_plaintext_password_fields(item.model_dump())
+        will_data = create_request_to_will_data(item)
+        will_id = await digital_will_service.save_will(user_address, will_data)
+        saved = await digital_will_service.get_will_by_id(
+            will_id, include_secrets=False
+        )
+        if saved:
+            created.append(will_dict_to_response(saved))
+
+    await invalidate_wills_cache(user_address)
+    return WillListResponse(wills=created, total=len(created))
+
+
+@app.delete("/api/wills/{will_id}", status_code=204)
+async def delete_will(
+    will_id: str,
+    x_will_address: Optional[str] = Header(None),
+    x_will_signature: Optional[str] = Header(None),
+    x_will_timestamp: Optional[str] = Header(None),
+):
+    """Delete a digital will entry (owner only)."""
+    user_address = _parse_will_auth(
+        x_will_address, x_will_signature, x_will_timestamp
+    )
+    deleted = await digital_will_service.delete_will(will_id, user_address)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Will not found")
+    await invalidate_wills_cache(user_address)
+    return None
+
+
 # Recovery Agent Endpoints
-@app.post("/api/recovery/search")
+@app.post("/api/recovery/search", dependencies=[Depends(verify_api_key)])
 async def search_unclaimed_property(request: RecoverySearchRequest):
     """
     Search for unclaimed property across multiple sources
@@ -451,7 +604,7 @@ async def search_unclaimed_property(request: RecoverySearchRequest):
         )
 
 
-@app.post("/api/recovery/prefill-form")
+@app.post("/api/recovery/prefill-form", dependencies=[Depends(verify_api_key)])
 async def prefill_claim_form(request: PrefillClaimFormRequest):
     """
     Pre-fill a claim form with beneficiary data from the vault
@@ -502,8 +655,8 @@ async def get_claim_forms(execution_id: str):
 
 @app.on_event("startup")
 async def startup_event():
-    """Start blockchain listener on application startup"""
-    # Start blockchain listener in background
+    """Initialize database and start blockchain listener."""
+    await init_db()
     asyncio.create_task(blockchain_listener.listen_for_events())
 
 

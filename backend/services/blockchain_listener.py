@@ -17,11 +17,13 @@ except ImportError:
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import logging
+import uuid
 
 from core.config import settings
 from services.database import digital_will_service
 from services.lit_decrypt import lit_decryption_service
 from services.notification_service import notification_service
+from services.tasks import execute_will_task
 from agent.executor import executor
 
 logging.basicConfig(level=logging.INFO)
@@ -138,7 +140,9 @@ class BlockchainListener:
 
             try:
                 # Fetch user's digital wills from database
-                wills = digital_will_service.get_wills_by_user(user_address)
+                wills = await digital_will_service.get_wills_with_secrets_for_user(
+                    user_address
+                )
 
                 if not wills:
                     logger.warning(f"No digital wills found for {user_address}")
@@ -168,8 +172,10 @@ class BlockchainListener:
             logger.info("Decrypting credential with Lit Protocol...")
             decrypted_password = await lit_decryption_service.decrypt_credential(
                 ciphertext=will["encryptedPassword"],
-                data_to_encrypt_hash=will["passwordHash"],
+                data_to_encrypt_hash=will.get("passwordHash") or will.get("dataToEncryptHash", ""),
                 user_address=user_address,
+                encrypted_symmetric_key=will.get("encryptedSymmetricKey"),
+                access_control_conditions=will.get("accessControlConditions"),
             )
 
             if not decrypted_password:
@@ -208,17 +214,16 @@ class BlockchainListener:
             logger.info(f"Executing task: {will['instruction']}")
             logger.info(f"Target URL: {will['websiteUrl']}")
 
-            # Execute the task using the DigitalExecutor
-            result = await executor.run_task(
+            execution_id = f"will_{will['id']}_{uuid.uuid4().hex[:8]}"
+            execute_will_task.delay(
                 task_description=task_description,
                 session_data=session_data,
+                execution_id=execution_id,
+                will_id=str(will["id"]),
             )
-
-            if result["success"]:
-                logger.info(f"Task completed successfully for will {will['id']}")
-                logger.info(f"Output: {result.get('output', 'N/A')}")
-            else:
-                logger.error(f"Task failed for will {will['id']}: {result.get('error')}")
+            logger.info(
+                "Queued will execution %s for will %s", execution_id, will["id"]
+            )
 
         except Exception as e:
             logger.error(f"Error processing will entry {will['id']}: {e}")

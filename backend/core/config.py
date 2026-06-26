@@ -33,13 +33,15 @@ class Settings(BaseSettings):
     # OpenAI Configuration
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o"
+    OPENAI_MODEL_MINI: str = "gpt-4o-mini"
 
     # Browser Configuration
     BROWSER_HEADLESS: bool = True
-    BROWSER_TIMEOUT: int = 30000  # 30 seconds
+    BROWSER_TIMEOUT: int = 30000  # 30 seconds in milliseconds
 
     # Security
     SECRET_KEY: Optional[str] = None
+    API_KEY: Optional[str] = None
 
     # Blockchain Configuration
     RPC_URL: Optional[str] = None
@@ -49,6 +51,15 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
 
+    # Database
+    DATABASE_URL: Optional[str] = None
+
+    # Redis (will list cache)
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Lit Protocol service wallet (backend decryption on DECEASED)
+    LIT_SERVICE_PRIVATE_KEY: Optional[str] = None
+    LIT_DEV_MODE: bool = False
 
     class Config:
         env_file = ".env"

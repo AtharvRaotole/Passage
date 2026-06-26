@@ -3,44 +3,79 @@
  * Handles encryption/decryption of credentials with access control conditions
  */
 
-import * as LitJsSdk from "lit-js-sdk";
-import type { AccessControlConditions } from "lit-js-sdk";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const LitJsSdk = require("lit-js-sdk") as any;
+type AccessControlConditions = any;
 
-// Lit Protocol configuration
-const LIT_NETWORK = "mumbai"; // Mumbai testnet (Polygon)
-const CHAIN = "mumbai"; // Polygon Mumbai testnet
-
-// CharonSwitch contract address (update after deployment)
-// This should be set from environment variable
 const CHARON_SWITCH_CONTRACT_ADDRESS =
   process.env.NEXT_PUBLIC_CHARON_SWITCH_ADDRESS ||
-  "0x0000000000000000000000000000000000000000"; // Placeholder
+  "0x0000000000000000000000000000000000000000";
+
+/** Map wagmi chain id to Lit chain string */
+function resolveLitChain(): string {
+  const explicit = process.env.NEXT_PUBLIC_LIT_CHAIN;
+  if (explicit) return explicit;
+  const chainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID;
+  if (chainId === "11155111") return "sepolia";
+  if (chainId === "80001") return "mumbai";
+  if (chainId === "137") return "polygon";
+  return "sepolia";
+}
+
+function resolveLitNetwork(): string {
+  const explicit = process.env.NEXT_PUBLIC_LIT_NETWORK;
+  if (explicit) return explicit;
+  const chain = resolveLitChain();
+  if (chain === "sepolia" || chain === "ethereum") return "cayenne";
+  return "mumbai";
+}
+
+const CHAIN = resolveLitChain();
+const LIT_NETWORK = resolveLitNetwork();
+
+let litClientPromise: Promise<any> | null = null;
 
 /**
- * Initialize Lit Protocol client
+ * Initialize Lit Protocol client (singleton — avoids reconnect latency)
  */
-export async function getLitClient(): Promise<LitJsSdk.LitNodeClient> {
-  const client = new LitJsSdk.LitNodeClient({
-    litNetwork: LIT_NETWORK as any,
-    debug: false,
+export async function getLitClient(): Promise<any> {
+  if (!litClientPromise) {
+    litClientPromise = (async () => {
+      const client = new LitJsSdk.LitNodeClient({
+        litNetwork: LIT_NETWORK as any,
+        debug: false,
+      });
+      await client.connect();
+      return client;
+    })();
+  }
+  return litClientPromise;
+}
+
+/** Prefetch Lit connection on will page mount */
+export function prefetchLitClient(): void {
+  if (process.env.NEXT_PUBLIC_WILL_SKIP_LIT === "true") return;
+  getLitClient().catch(() => {
+    litClientPromise = null;
   });
-  await client.connect();
-  return client;
+}
+
+export function getLitChain(): string {
+  return CHAIN;
+}
+
+export function isWillLitEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_WILL_SKIP_LIT !== "true";
 }
 
 /**
- * Get access control conditions for CharonSwitch
- * Conditions: User owns CharonSwitch NFT OR Smart Contract State is DECEASED
- * 
- * @param userAddress - The user's wallet address
- * @returns Access control conditions array
+ * Get access control conditions for CharonSwitch (unlock on DECEASED status = 2)
  */
 export function getCharonAccessControlConditions(
   userAddress: string
 ): AccessControlConditions {
   return [
     {
-      // Condition 1: Check if user's status is DECEASED (status = 2) in CharonSwitch contract
       contractAddress: CHARON_SWITCH_CONTRACT_ADDRESS,
       functionName: "getUserInfo",
       functionParams: [userAddress],
@@ -92,75 +127,30 @@ export function getCharonAccessControlConditions(
       returnValueTest: {
         key: "status",
         comparator: "=",
-        value: "2", // DECEASED status
-      },
-    },
-    {
-      // Condition 2: User owns CharonSwitch NFT (placeholder for future NFT implementation)
-      // This can be expanded when NFT functionality is added
-      contractAddress: CHARON_SWITCH_CONTRACT_ADDRESS,
-      functionName: "balanceOf",
-      functionParams: [userAddress],
-      functionAbi: {
-        inputs: [
-          {
-            internalType: "address",
-            name: "account",
-            type: "address",
-          },
-        ],
-        name: "balanceOf",
-        outputs: [
-          {
-            internalType: "uint256",
-            name: "",
-            type: "uint256",
-          },
-        ],
-        stateMutability: "view",
-        type: "function",
-      },
-      chain: CHAIN,
-      returnValueTest: {
-        key: "",
-        comparator: ">",
-        value: "0",
+        value: "2",
       },
     },
   ];
 }
 
-/**
- * Encrypt a credential using Lit Protocol
- * 
- * @param credential - The credential string to encrypt
- * @param userAddress - The user's wallet address for access control
- * @returns Object containing encrypted data and dataToEncryptHash
- */
 export async function encryptCredential(
   credential: string,
   userAddress: string
 ): Promise<{
   ciphertext: string;
   dataToEncryptHash: string;
+  encryptedSymmetricKey: string;
   accessControlConditions: AccessControlConditions;
 }> {
   try {
     const client = await getLitClient();
-
-    // Get access control conditions
     const accessControlConditions = getCharonAccessControlConditions(userAddress);
 
-    // Convert credential to Uint8Array
-    // Using Lit SDK encryption methods
     const { encryptedString, symmetricKey } = await LitJsSdk.encryptString(
       credential
     );
-
-    // Convert encrypted string to base64
     const ciphertext = await LitJsSdk.blobToBase64String(encryptedString);
 
-    // Save encryption key with access control conditions
     const authSig = await LitJsSdk.checkAndSignAuthMessage({
       chain: CHAIN,
     });
@@ -172,12 +162,12 @@ export async function encryptCredential(
       chain: CHAIN,
     });
 
-    // Create dataToEncryptHash (hash of the credential for verification)
     const dataToEncryptHash = await LitJsSdk.hashCredential(credential);
 
     return {
       ciphertext,
       dataToEncryptHash,
+      encryptedSymmetricKey,
       accessControlConditions,
     };
   } catch (error) {
@@ -186,14 +176,18 @@ export async function encryptCredential(
   }
 }
 
-/**
- * Decrypt a credential using Lit Protocol
- * 
- * @param ciphertext - The encrypted credential (base64 string)
- * @param dataToEncryptHash - The hash of the original credential
- * @param userAddress - The user's wallet address for access control
- * @returns The decrypted credential string
- */
+/** Dev-only: base64 encode without Lit (when NEXT_PUBLIC_WILL_SKIP_LIT=true) */
+export function encryptCredentialDev(credential: string, userAddress: string) {
+  const ciphertext = btoa(credential);
+  const dataToEncryptHash = `dev_${Date.now()}`;
+  return {
+    ciphertext,
+    dataToEncryptHash,
+    encryptedSymmetricKey: "dev_symmetric_key",
+    accessControlConditions: getCharonAccessControlConditions(userAddress),
+  };
+}
+
 export async function decryptCredential(
   ciphertext: string,
   dataToEncryptHash: string,
@@ -201,16 +195,12 @@ export async function decryptCredential(
 ): Promise<string> {
   try {
     const client = await getLitClient();
-
-    // Get access control conditions
     const accessControlConditions = getCharonAccessControlConditions(userAddress);
 
-    // Get auth signature
     const authSig = await LitJsSdk.checkAndSignAuthMessage({
       chain: CHAIN,
     });
 
-    // Retrieve the encryption key
     const symmetricKey = await client.getEncryptionKey({
       accessControlConditions,
       toDecrypt: dataToEncryptHash,
@@ -218,39 +208,19 @@ export async function decryptCredential(
       authSig,
     });
 
-    // Convert base64 ciphertext back to blob
     const encryptedBlob = await LitJsSdk.base64StringToBlob(ciphertext);
-
-    // Decrypt the credential
-    const decryptedString = await LitJsSdk.decryptString(
-      encryptedBlob,
-      symmetricKey
-    );
-
-    return decryptedString;
+    return await LitJsSdk.decryptString(encryptedBlob, symmetricKey);
   } catch (error) {
     console.error("Decryption error:", error);
     throw new Error(`Failed to decrypt credential: ${error}`);
   }
 }
 
-/**
- * Verify access control conditions are met
- * 
- * @param userAddress - The user's wallet address
- * @returns Boolean indicating if access is granted
- */
-export async function verifyAccess(
-  userAddress: string
-): Promise<boolean> {
+export async function verifyAccess(userAddress: string): Promise<boolean> {
   try {
     const client = await getLitClient();
     const accessControlConditions = getCharonAccessControlConditions(userAddress);
-    const authSig = await checkAndSignAuthMessage({
-      chain: CHAIN,
-    });
-
-    // Test if user has access (using a dummy hash)
+    const authSig = await LitJsSdk.checkAndSignAuthMessage({ chain: CHAIN });
     const testHash = "0x" + "0".repeat(64);
     try {
       await client.getEncryptionKey({
@@ -263,9 +233,7 @@ export async function verifyAccess(
     } catch {
       return false;
     }
-  } catch (error) {
-    console.error("Access verification error:", error);
+  } catch {
     return false;
   }
 }
-

@@ -32,11 +32,13 @@ async def test_deceased_processing():
         "username": "testuser",
         "encryptedPassword": "encrypted_password_placeholder",
         "passwordHash": "hash_placeholder",
+        "encryptedSymmetricKey": "sym_key_placeholder",
+        "accessControlConditions": [],
         "instruction": "Delete my account",
-        "totpSecret": "JBSWY3DPEHPK3PXP",  # Test TOTP secret
+        "totpSecret": "JBSWY3DPEHPK3PXP",
     }
-    
-    will_id = digital_will_service.save_will(test_user, test_will)
+
+    will_id = await digital_will_service.save_will(test_user, test_will)
     print(f"   ✓ Created will entry: {will_id}")
     
     # 2. Simulate StatusChanged event
