@@ -24,7 +24,6 @@ from services.database import digital_will_service
 from services.lit_decrypt import lit_decryption_service
 from services.notification_service import notification_service
 from services.tasks import execute_will_task
-from agent.executor import executor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
