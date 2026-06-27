@@ -388,6 +388,14 @@ contract CharonSwitch is Ownable {
     }
 
     /**
+     * @notice Set the Chainlink oracle address (owner only)
+     * @param oracle Address of the ChainlinkOracle contract
+     */
+    function setChainlinkOracle(address oracle) external onlyOwner {
+        chainlinkOracle = oracle;
+    }
+
+    /**
      * @notice Get effective threshold for a user (accounting for demo mode)
      * @param userAddress Address of the user
      * @return effectiveThreshold Effective threshold in seconds

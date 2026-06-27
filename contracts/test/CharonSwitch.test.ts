@@ -12,6 +12,7 @@ describe("CharonSwitch", function () {
   let otherAccount: any;
 
   const THRESHOLD = 3600; // 1 hour in seconds
+  const EMPTY_VERIFICATION_ARGS = ["0x", "0x"] as const;
 
   beforeEach(async function () {
     [owner, user, guardian1, guardian2, guardian3, otherAccount] =
@@ -20,6 +21,11 @@ describe("CharonSwitch", function () {
     const CharonSwitchFactory = await ethers.getContractFactory("CharonSwitch");
     charonSwitch = await CharonSwitchFactory.deploy();
     await charonSwitch.waitForDeployment();
+
+    const MockOracleFactory = await ethers.getContractFactory("MockChainlinkOracle");
+    const mockOracle = await MockOracleFactory.deploy();
+    await mockOracle.waitForDeployment();
+    await charonSwitch.setChainlinkOracle(await mockOracle.getAddress());
   });
 
   describe("Registration", function () {
@@ -157,7 +163,7 @@ describe("CharonSwitch", function () {
       await ethers.provider.send("evm_mine", []);
 
       // Initiate verification
-      await charonSwitch.connect(user).initiateVerification();
+      await charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS);
 
       // Verify status is PENDING_VERIFICATION
       let userInfo = await charonSwitch.getUserInfo(user.address);
@@ -195,7 +201,7 @@ describe("CharonSwitch", function () {
       await ethers.provider.send("evm_increaseTime", [THRESHOLD + 1]);
       await ethers.provider.send("evm_mine", []);
 
-      await expect(charonSwitch.connect(user).initiateVerification())
+      await expect(charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS))
         .to.emit(charonSwitch, "VerificationInitiated")
         .to.emit(charonSwitch, "StatusChanged")
         .withArgs(user.address, 0, 1); // ALIVE -> PENDING_VERIFICATION
@@ -206,7 +212,7 @@ describe("CharonSwitch", function () {
 
     it("Should reject verification if threshold not exceeded", async function () {
       await expect(
-        charonSwitch.connect(user).initiateVerification()
+        charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS)
       ).to.be.revertedWithCustomError(charonSwitch, "InvalidStatusTransition");
     });
 
@@ -216,11 +222,11 @@ describe("CharonSwitch", function () {
       await ethers.provider.send("evm_mine", []);
 
       // Initiate verification
-      await charonSwitch.connect(user).initiateVerification();
+      await charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS);
 
       // Try to initiate again
       await expect(
-        charonSwitch.connect(user).initiateVerification()
+        charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS)
       ).to.be.revertedWithCustomError(charonSwitch, "InvalidStatusTransition");
     });
   });
@@ -242,7 +248,7 @@ describe("CharonSwitch", function () {
       await ethers.provider.send("evm_increaseTime", [THRESHOLD + 1]);
       await ethers.provider.send("evm_mine", []);
 
-      const tx = await charonSwitch.connect(user).initiateVerification();
+      const tx = await charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(
         (log: any) =>
@@ -303,7 +309,7 @@ describe("CharonSwitch", function () {
       await ethers.provider.send("evm_increaseTime", [THRESHOLD + 1]);
       await ethers.provider.send("evm_mine", []);
 
-      const tx = await charonSwitch.connect(user).initiateVerification();
+      const tx = await charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(
         (log: any) =>
@@ -391,7 +397,7 @@ describe("CharonSwitch", function () {
       await ethers.provider.send("evm_increaseTime", [THRESHOLD + 1]);
       await ethers.provider.send("evm_mine", []);
 
-      const tx = await charonSwitch.connect(newUser).initiateVerification();
+      const tx = await charonSwitch.connect(newUser).initiateVerification(...EMPTY_VERIFICATION_ARGS);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(
         (log: any) =>
@@ -438,7 +444,7 @@ describe("CharonSwitch", function () {
       // Move to PENDING_VERIFICATION
       await ethers.provider.send("evm_increaseTime", [THRESHOLD + 1]);
       await ethers.provider.send("evm_mine", []);
-      await charonSwitch.connect(user).initiateVerification();
+      await charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS);
       userInfo = await charonSwitch.getUserInfo(user.address);
       expect(userInfo.status).to.equal(1); // PENDING_VERIFICATION
 
@@ -452,7 +458,7 @@ describe("CharonSwitch", function () {
       // Move to PENDING_VERIFICATION
       await ethers.provider.send("evm_increaseTime", [THRESHOLD + 1]);
       await ethers.provider.send("evm_mine", []);
-      const tx = await charonSwitch.connect(user).initiateVerification();
+      const tx = await charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(
         (log: any) =>
@@ -474,7 +480,7 @@ describe("CharonSwitch", function () {
       // Move to PENDING_VERIFICATION
       await ethers.provider.send("evm_increaseTime", [THRESHOLD + 1]);
       await ethers.provider.send("evm_mine", []);
-      const tx = await charonSwitch.connect(user).initiateVerification();
+      const tx = await charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS);
       const receipt = await tx.wait();
       const event = receipt?.logs.find(
         (log: any) =>

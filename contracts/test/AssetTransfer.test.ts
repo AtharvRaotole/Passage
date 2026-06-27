@@ -12,6 +12,24 @@ describe("AssetTransfer", function () {
   let beneficiary2: HardhatEthersSigner;
   let mockToken: Contract;
 
+  const EMPTY_VERIFICATION_ARGS = ["0x", "0x"] as const;
+  const DEFAULT_THRESHOLD = 86400;
+
+  async function setupMockOracle() {
+    const MockOracleFactory = await ethers.getContractFactory("MockChainlinkOracle");
+    const mockOracle = await MockOracleFactory.deploy();
+    await mockOracle.waitForDeployment();
+    await charonSwitch.setChainlinkOracle(await mockOracle.getAddress());
+  }
+
+  async function markUserDeceased(threshold = DEFAULT_THRESHOLD) {
+    await ethers.provider.send("evm_increaseTime", [threshold + 1]);
+    await ethers.provider.send("evm_mine", []);
+    await charonSwitch.connect(user).initiateVerification(...EMPTY_VERIFICATION_ARGS);
+    await charonSwitch.connect(owner).guardianConfirm(user.address);
+    await charonSwitch.connect(beneficiary2).guardianConfirm(user.address);
+  }
+
   beforeEach(async function () {
     [owner, user, beneficiary1, beneficiary2] = await ethers.getSigners();
 
@@ -19,6 +37,7 @@ describe("AssetTransfer", function () {
     const CharonSwitch = await ethers.getContractFactory("CharonSwitch");
     charonSwitch = await CharonSwitch.deploy();
     await charonSwitch.waitForDeployment();
+    await setupMockOracle();
 
     // Deploy AssetTransfer
     const AssetTransfer = await ethers.getContractFactory("AssetTransfer");
@@ -78,7 +97,7 @@ describe("AssetTransfer", function () {
 
     it("Should allow token deposits when user is ALIVE", async function () {
       // Register user in CharonSwitch
-      const guardians = [owner.address, owner.address, owner.address];
+      const guardians = [owner.address, beneficiary1.address, beneficiary2.address];
       await charonSwitch.connect(user).register(86400, guardians, 2);
       await charonSwitch.connect(user).pulse();
 
@@ -92,14 +111,9 @@ describe("AssetTransfer", function () {
 
     it("Should reject deposits when user is DECEASED", async function () {
       // Register user and mark as DECEASED
-      const guardians = [owner.address, owner.address, owner.address];
+      const guardians = [owner.address, beneficiary1.address, beneficiary2.address];
       await charonSwitch.connect(user).register(86400, guardians, 2);
-      
-      // Mock oracle response to mark as DECEASED
-      await charonSwitch.connect(owner).mockOracleResponse(
-        ethers.keccak256(ethers.toUtf8Bytes("test")),
-        true
-      );
+      await markUserDeceased();
 
       const depositAmount = ethers.parseEther("100");
       await mockToken.connect(user).approve(await assetTransfer.getAddress(), depositAmount);
@@ -118,7 +132,7 @@ describe("AssetTransfer", function () {
       await assetTransfer.connect(user).initializeBeneficiaries(beneficiaries, percentages);
 
       // Register user and deposit tokens
-      const guardians = [owner.address, owner.address, owner.address];
+      const guardians = [owner.address, beneficiary1.address, beneficiary2.address];
       await charonSwitch.connect(user).register(86400, guardians, 2);
       await charonSwitch.connect(user).pulse();
 
@@ -129,8 +143,7 @@ describe("AssetTransfer", function () {
 
     it("Should transfer assets to beneficiaries when user is DECEASED", async function () {
       // Mark user as DECEASED
-      const requestId = ethers.keccak256(ethers.toUtf8Bytes("test"));
-      await charonSwitch.connect(owner).mockOracleResponse(requestId, true);
+      await markUserDeceased();
 
       // Verify user is DECEASED
       const userInfo = await charonSwitch.getUserInfo(user.address);
@@ -168,7 +181,7 @@ describe("AssetTransfer", function () {
       await assetTransfer.connect(user).initializeBeneficiaries(beneficiaries, percentages);
 
       // Register user and deposit tokens
-      const guardians = [owner.address, owner.address, owner.address];
+      const guardians = [owner.address, beneficiary1.address, beneficiary2.address];
       await charonSwitch.connect(user).register(86400, guardians, 2);
       await charonSwitch.connect(user).pulse();
 
@@ -179,8 +192,7 @@ describe("AssetTransfer", function () {
 
     it("Should sweep all tokens to beneficiaries when user is DECEASED", async function () {
       // Mark user as DECEASED
-      const requestId = ethers.keccak256(ethers.toUtf8Bytes("test"));
-      await charonSwitch.connect(owner).mockOracleResponse(requestId, true);
+      await markUserDeceased();
 
       // Sweep wallet
       await assetTransfer.connect(owner).sweepWallet(user.address);
@@ -216,7 +228,7 @@ describe("AssetTransfer", function () {
       await assetTransfer.connect(user).initializeBeneficiaries(beneficiaries, percentages);
 
       // Register user
-      const guardians = [owner.address, owner.address, owner.address];
+      const guardians = [owner.address, beneficiary1.address, beneficiary2.address];
       await charonSwitch.connect(user).register(86400, guardians, 2);
       await charonSwitch.connect(user).pulse();
 
@@ -231,8 +243,7 @@ describe("AssetTransfer", function () {
 
     it("Should transfer all tokens in sweep", async function () {
       // Mark user as DECEASED
-      const requestId = ethers.keccak256(ethers.toUtf8Bytes("test"));
-      await charonSwitch.connect(owner).mockOracleResponse(requestId, true);
+      await markUserDeceased();
 
       // Sweep wallet
       await assetTransfer.connect(owner).sweepWallet(user.address);
