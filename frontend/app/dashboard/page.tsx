@@ -1,15 +1,16 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { CHARON_SWITCH_ABI, CHARON_SWITCH_ADDRESS, UserStatus } from "@/lib/contracts";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { usePulse } from "@/hooks/usePulse";
+import { thresholdToDays } from "@/lib/pulseUtils";
+import { PulseCheckInButton } from "@/components/pulse/PulseCheckInButton";
+import { AddToWalletSection } from "@/components/pulse/AddToWalletSection";
 import {
   Shield,
-  Heart,
   Clock,
   Wallet,
   FileText,
@@ -18,67 +19,27 @@ import {
   Settings,
   ChevronRight,
   Activity,
-  CheckCircle2,
-  AlertCircle,
   Loader2,
 } from "lucide-react";
 
 export default function DashboardPage() {
   const router = useRouter();
   const { authenticated, user, login, logout } = usePrivy();
-  const { address } = useAccount();
   const { data: userProfile, isLoading: profileLoading } = useUserProfile();
-  
-  const walletAddress = address || user?.wallet?.address;
-  
-  const { data: userInfo, refetch } = useReadContract({
-    address: CHARON_SWITCH_ADDRESS,
-    abi: CHARON_SWITCH_ABI,
-    functionName: "getUserInfo",
-    args: walletAddress ? [walletAddress as `0x${string}`] : undefined,
-    query: {
-      enabled: !!walletAddress && authenticated,
-    },
-  });
+  const {
+    walletAddress,
+    statusInfo,
+    lastSeen,
+    threshold,
+    handlePulse,
+    isPending,
+    isConfirming,
+    isSuccess,
+  } = usePulse();
 
-  const { writeContract, data: hash, isPending } = useWriteContract();
-  
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = 
-    useWaitForTransactionReceipt({ hash });
+  const StatusIcon = statusInfo.icon;
+  const thresholdDays = thresholdToDays(threshold);
 
-  const handlePulse = () => {
-    if (!walletAddress) return;
-    writeContract({
-      address: CHARON_SWITCH_ADDRESS,
-      abi: CHARON_SWITCH_ABI,
-      functionName: "pulse",
-    });
-  };
-
-  if (isConfirmed) {
-    refetch();
-  }
-
-  const status = userInfo?.[0] !== undefined ? Number(userInfo[0]) : null;
-  const lastSeen = userInfo?.[1] ? Number(userInfo[1]) * 1000 : null;
-  const threshold = userInfo?.[2] ? Number(userInfo[2]) : null;
-
-  const getStatusInfo = (status: number | null) => {
-    switch (status) {
-      case UserStatus.ALIVE:
-        return { text: "Active", color: "text-emerald-600", bg: "bg-emerald-50", icon: CheckCircle2 };
-      case UserStatus.PENDING_VERIFICATION:
-        return { text: "Pending", color: "text-amber-600", bg: "bg-amber-50", icon: AlertCircle };
-      case UserStatus.DECEASED:
-        return { text: "Triggered", color: "text-red-600", bg: "bg-red-50", icon: AlertCircle };
-      default:
-        return { text: "Not Registered", color: "text-neutral-500", bg: "bg-neutral-50", icon: Clock };
-    }
-  };
-
-  const statusInfo = getStatusInfo(status);
-
-  // Login screen
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6">
@@ -94,9 +55,10 @@ export default function DashboardPage() {
               Sign in to access your digital estate dashboard
             </p>
           </div>
-          
+
           <div className="bg-white rounded-2xl border border-neutral-200 p-8 shadow-sm">
             <button
+              type="button"
               onClick={login}
               className="w-full bg-neutral-900 text-white py-3 rounded-xl font-medium hover:bg-neutral-800 transition-colors"
             >
@@ -111,9 +73,14 @@ export default function DashboardPage() {
     );
   }
 
+  const displayName =
+    userProfile?.displayName ||
+    userProfile?.email ||
+    user?.email?.address ||
+    null;
+
   return (
     <div className="min-h-screen bg-neutral-50">
-        {/* Header */}
       <header className="bg-white border-b border-neutral-200">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="text-xl font-semibold tracking-tight">
@@ -121,9 +88,13 @@ export default function DashboardPage() {
           </Link>
           <div className="flex items-center gap-4">
             <span className="text-sm text-neutral-500">
-              {user?.email?.address || (walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : '')}
+              {user?.email?.address ||
+                (walletAddress
+                  ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
+                  : "")}
             </span>
-            <button 
+            <button
+              type="button"
               onClick={logout}
               className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors"
             >
@@ -134,9 +105,10 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Status Overview */}
         <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-neutral-900 mb-6">Dashboard</h1>
+          <h1 className="text-2xl font-semibold text-neutral-900 mb-6">
+            Dashboard
+          </h1>
 
           {userProfile && (
             <div className="mb-6 bg-white rounded-2xl border border-neutral-200 p-5">
@@ -144,7 +116,9 @@ export default function DashboardPage() {
                 <span className="text-neutral-500">
                   Profile:{" "}
                   <span className="text-neutral-900 font-medium">
-                    {userProfile.email || userProfile.displayName || "Wallet user"}
+                    {userProfile.email ||
+                      userProfile.displayName ||
+                      "Wallet user"}
                   </span>
                 </span>
                 <span className="text-neutral-500">
@@ -174,76 +148,95 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Status Card */}
             <div className="bg-white rounded-2xl border border-neutral-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-sm text-neutral-500">Status</span>
-                <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full ${statusInfo.bg}`}>
-                  <statusInfo.icon className={`w-3.5 h-3.5 ${statusInfo.color}`} />
-                  <span className={`text-xs font-medium ${statusInfo.color}`}>{statusInfo.text}</span>
+                <div
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-full ${statusInfo.bg}`}
+                >
+                  <StatusIcon
+                    className={`w-3.5 h-3.5 ${statusInfo.color}`}
+                  />
+                  <span className={`text-xs font-medium ${statusInfo.color}`}>
+                    {statusInfo.text}
+                  </span>
                 </div>
               </div>
               <div className="text-3xl font-semibold text-neutral-900 mb-1">
-                {lastSeen ? formatDistanceToNow(new Date(lastSeen), { addSuffix: false }) : '—'}
+                {lastSeen
+                  ? formatDistanceToNow(new Date(lastSeen), {
+                      addSuffix: false,
+                    })
+                  : "—"}
               </div>
               <div className="text-sm text-neutral-500">since last check-in</div>
             </div>
 
-            {/* Threshold Card */}
             <div className="bg-white rounded-2xl border border-neutral-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-sm text-neutral-500">Threshold</span>
                 <Clock className="w-4 h-4 text-neutral-400" />
               </div>
               <div className="text-3xl font-semibold text-neutral-900 mb-1">
-                {threshold ? Math.floor(threshold / 86400) : '—'}
+                {thresholdDays ?? "—"}
               </div>
-              <div className="text-sm text-neutral-500">days without activity</div>
+              <div className="text-sm text-neutral-500">
+                days without activity
+              </div>
             </div>
 
-            {/* Pulse Card */}
             <div className="bg-white rounded-2xl border border-neutral-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-sm text-neutral-500">Check-in</span>
                 <Activity className="w-4 h-4 text-neutral-400" />
               </div>
-              <button
+              <PulseCheckInButton
                 onClick={handlePulse}
-                disabled={isPending || isConfirming}
-                className="w-full bg-neutral-900 text-white py-3 rounded-xl font-medium hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {(isPending || isConfirming) ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Heart className="w-4 h-4" />
-                    Send Pulse
-                  </>
-                )}
-              </button>
-              {isConfirmed && (
-                <p className="mt-2 text-center text-sm text-emerald-600">
-                  Check-in confirmed
-                </p>
-              )}
+                disabled={!walletAddress}
+                isPending={isPending}
+                isConfirming={isConfirming}
+                isSuccess={isSuccess}
+              />
             </div>
           </div>
         </div>
 
-        {/* Quick Actions */}
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-neutral-900 mb-4">Quick Actions</h2>
+          <AddToWalletSection displayName={displayName} lastSeen={lastSeen} />
+        </div>
+
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-neutral-900 mb-4">
+            Quick Actions
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { icon: Wallet, title: "Crypto Vault", description: "Manage digital assets", href: "/dashboard/vault" },
-              { icon: FileText, title: "Digital Will", description: "Account credentials", href: "/dashboard/will" },
-              { icon: ImageIcon, title: "Memory Vault", description: "Photos & messages", href: "/dashboard/memories" },
-              { icon: Search, title: "Asset Recovery", description: "Find unclaimed assets", href: "/dashboard/recovery" },
+              {
+                icon: Wallet,
+                title: "Crypto Vault",
+                description: "Manage digital assets",
+                href: "/dashboard/vault",
+              },
+              {
+                icon: FileText,
+                title: "Digital Will",
+                description: "Account credentials",
+                href: "/dashboard/will",
+              },
+              {
+                icon: ImageIcon,
+                title: "Memory Vault",
+                description: "Photos & messages",
+                href: "/dashboard/memories",
+              },
+              {
+                icon: Search,
+                title: "Asset Recovery",
+                description: "Find unclaimed assets",
+                href: "/dashboard/recovery",
+              },
             ].map((action, index) => (
               <div
                 key={index}
@@ -256,14 +249,17 @@ export default function DashboardPage() {
                   </div>
                   <ChevronRight className="w-5 h-5 text-neutral-300 group-hover:text-neutral-500 transition-colors" />
                 </div>
-                <h3 className="mt-4 font-medium text-neutral-900 group-hover:text-neutral-700 transition-colors">{action.title}</h3>
-                <p className="text-sm text-neutral-500 mt-1">{action.description}</p>
+                <h3 className="mt-4 font-medium text-neutral-900 group-hover:text-neutral-700 transition-colors">
+                  {action.title}
+                </h3>
+                <p className="text-sm text-neutral-500 mt-1">
+                  {action.description}
+                </p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Settings */}
         <div className="bg-white rounded-2xl border border-neutral-200 p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -271,18 +267,22 @@ export default function DashboardPage() {
                 <Settings className="w-5 h-5 text-neutral-600" />
               </div>
               <div>
-                <h3 className="font-medium text-neutral-900">Settings & Security</h3>
-                <p className="text-sm text-neutral-500">Manage guardians, thresholds, and security</p>
+                <h3 className="font-medium text-neutral-900">
+                  Settings & Security
+                </h3>
+                <p className="text-sm text-neutral-500">
+                  Manage guardians, thresholds, and security
+                </p>
               </div>
             </div>
-            <Link 
+            <Link
               href="/onboarding"
               className="text-sm font-medium text-neutral-900 hover:underline"
             >
               Configure
             </Link>
           </div>
-      </div>
+        </div>
       </main>
     </div>
   );

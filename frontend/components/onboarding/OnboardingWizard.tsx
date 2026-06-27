@@ -169,7 +169,8 @@ export function OnboardingWizard() {
 
   // Persist onboarding after on-chain registration succeeds
   useEffect(() => {
-    if (!isConfirmed || !walletAddress || savedRef.current) return;
+    const address = walletAddress;
+    if (!isConfirmed || !address || savedRef.current) return;
 
     savedRef.current = true;
     let cancelled = false;
@@ -183,9 +184,12 @@ export function OnboardingWizard() {
         if (!token) {
           throw new Error("Missing access token — please sign in again");
         }
+        if (!address) {
+          throw new Error("Wallet not connected");
+        }
 
         await saveUserOnboarding(token, {
-          walletAddress,
+          walletAddress: address,
           persona: data.persona,
           heartbeatIntervalDays: data.heartbeatInterval,
           requiredConfirmations: data.requiredConfirmations,
