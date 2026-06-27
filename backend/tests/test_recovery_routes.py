@@ -10,24 +10,25 @@ from core.config import settings
 def client(monkeypatch):
     monkeypatch.setattr(settings, "API_KEY", "test-key")
 
-    async def mock_search_all_sources(**kwargs):
-        return {
-            "success": True,
-            "total_assets": [
-                {
-                    "source": "missingmoney",
-                    "property_type": "Unclaimed Property",
-                    "value": "$100",
-                }
-            ],
-            "total_estimated_value": 100.0,
-            "claim_forms": [],
-            "sources": {},
-        }
+    class MockRecoveryAgent:
+        async def search_all_sources(self, **kwargs):
+            return {
+                "success": True,
+                "total_assets": [
+                    {
+                        "source": "missingmoney",
+                        "property_type": "Unclaimed Property",
+                        "value": "$100",
+                    }
+                ],
+                "total_estimated_value": 100.0,
+                "claim_forms": [],
+                "sources": {},
+            }
 
     monkeypatch.setattr(
-        "main.recovery_agent.search_all_sources",
-        mock_search_all_sources,
+        "main._get_recovery_agent",
+        lambda: MockRecoveryAgent(),
     )
     from main import app
 
