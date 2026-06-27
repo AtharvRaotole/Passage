@@ -6,20 +6,20 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
 from core.celery_app import celery_app
-from agent.executor import DigitalExecutor
 from services.websocket_manager import websocket_manager
 from services.task_store import set_task_id_mapping, get_task_id_by_execution_id
 
 logger = logging.getLogger(__name__)
 
 # Global executor instance (will be initialized in worker)
-_executor: Optional[DigitalExecutor] = None
+_executor: Optional[Any] = None
 
 
-def get_executor() -> DigitalExecutor:
+def get_executor():
     """Get or create executor instance"""
     global _executor
     if _executor is None:
+        from agent.executor import DigitalExecutor
         _executor = DigitalExecutor()
     return _executor
 

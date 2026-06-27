@@ -3,9 +3,6 @@ uvicorn[standard]==0.24.0
 pydantic>=2.7.4,<3
 pydantic-settings>=2.1.0,<3
 python-dotenv>=1.0.0
-browser-use==0.1.40
-playwright==1.49.1
-langchain-openai==0.3.1
 python-multipart==0.0.6
 web3==6.11.0
 pyotp==2.9.0

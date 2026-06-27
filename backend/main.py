@@ -14,8 +14,6 @@ from pathlib import Path
 
 from core.config import settings
 from core.auth import verify_api_key
-from agent.executor import executor
-from agent.recovery_agent import recovery_agent
 from services.blockchain_listener import blockchain_listener
 from services.websocket_manager import websocket_manager
 from services.screenshot_service import screenshot_service
@@ -59,6 +57,19 @@ logger = logging.getLogger(__name__)
 
 _will_create_counts: Dict[str, list] = {}
 WILL_CREATE_LIMIT = 30
+
+
+def _agent_initialized() -> bool:
+    try:
+        from agent.executor import executor
+        return executor._initialized
+    except ImportError:
+        return False
+
+
+def _get_recovery_agent():
+    from agent.recovery_agent import recovery_agent
+    return recovery_agent
 
 
 def _check_will_rate_limit(user_address: str) -> None:
@@ -196,7 +207,7 @@ async def health_check():
         "status": "healthy",
         "service": settings.API_TITLE,
         "version": settings.API_VERSION,
-        "agent_initialized": executor._initialized,
+        "agent_initialized": _agent_initialized(),
     }
 
 
@@ -577,6 +588,7 @@ async def search_unclaimed_property(request: RecoverySearchRequest):
     and Treasury Hunt for unclaimed assets belonging to the deceased.
     """
     execution_id = str(uuid.uuid4())
+    recovery_agent = _get_recovery_agent()
 
     try:
         sources = request.sources if request.sources else ["all"]
@@ -675,6 +687,7 @@ async def prefill_claim_form(request: PrefillClaimFormRequest):
     Pre-fill a claim form with beneficiary data from the vault
     """
     execution_id = str(uuid.uuid4())
+    recovery_agent = _get_recovery_agent()
 
     try:
         result = await recovery_agent.prefill_claim_form(
@@ -708,6 +721,7 @@ async def get_claim_forms(execution_id: str):
     Get list of claim forms for a recovery execution
     """
     try:
+        recovery_agent = _get_recovery_agent()
         # Access the private method - in production, consider making this public
         forms = recovery_agent._find_claim_forms(execution_id)
         return {"execution_id": execution_id, "claim_forms": forms}
@@ -729,7 +743,11 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on application shutdown"""
     blockchain_listener.stop_listening()
-    await executor.cleanup()
+    try:
+        from agent.executor import executor
+        await executor.cleanup()
+    except ImportError:
+        pass
 
 
 if __name__ == "__main__":
